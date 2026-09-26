@@ -1,6 +1,7 @@
 """Local storage protections. A compromised OS account or administrator is out of scope."""
 
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -38,8 +39,15 @@ def protect_directory(path: Path) -> Path:
         "security.sqlite3-journal",
         "safe-mode",
     }
-    if root.exists() and any(child.name not in managed for child in root.iterdir()):
-        raise ValueError("dedicated_data_directory_required")
+    if root.exists():
+        for child in root.iterdir():
+            if child.name not in managed and not re.fullmatch(
+                r"before-jobs-v1-[0-9a-f]{32}\.sqlite3", child.name
+            ):
+                raise ValueError("dedicated_data_directory_required")
+            local_path(child)
+            if child.is_dir():
+                raise ValueError("dedicated_data_directory_required")
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if sys.platform == "win32":
         # Fixed program, not a command assembled from a caller-controlled path.
@@ -64,9 +72,7 @@ $rules = $actual.GetAccessRules($true, $true, [System.Security.Principal.Securit
 if ($rules.Count -ne 1 -or $rules[0].IdentityReference -ne $sid -or
     $rules[0].AccessControlType -ne 'Allow' -or
     $rules[0].FileSystemRights -ne 'FullControl') { throw 'unexpected access rules' }
-foreach ($name in @('security.sqlite3', 'security.sqlite3-wal', 'security.sqlite3-shm',
-                    'security.sqlite3-journal', 'safe-mode')) {
-    $file = [System.IO.Path]::Combine($path, $name)
+foreach ($file in [System.IO.Directory]::EnumerateFiles($path)) {
     if ([System.IO.File]::Exists($file)) {
         if ([IO.File]::GetAttributes($file) -band [IO.FileAttributes]::ReparsePoint) {
             throw 'linked file'
@@ -100,6 +106,8 @@ foreach ($name in @('security.sqlite3', 'security.sqlite3-wal', 'security.sqlite
         info = root.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise OSError("private_directory_unavailable")
+        for backup in root.glob("before-jobs-v1-*.sqlite3"):
+            private_file(backup)
     return root
 
 
