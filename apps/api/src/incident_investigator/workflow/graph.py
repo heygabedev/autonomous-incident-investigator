@@ -89,6 +89,26 @@ def validate_state(state: RunState, pin: RunPin) -> None:
         raise ValueError("fabricated_citation")
     if state.evidence_rounds > state.round_limit:
         raise ValueError("evidence_round_limit")
+    available = {
+        item.source_id
+        for item in state.incident.observations
+        if item.available_round <= state.evidence_rounds
+    }
+    if not set(state.visible_ids).issubset(available) or len(state.visible_ids) != len(
+        set(state.visible_ids)
+    ):
+        raise ValueError("invalid_visible_evidence")
+    if not set(state.timeline).issubset(known) or len(state.timeline) != len(set(state.timeline)):
+        raise ValueError("invalid_timeline")
+    if state.next_stage == "done":
+        if (
+            not state.completed
+            or state.completed[-1] != "report"
+            or state.report != make_report(state)
+        ):
+            raise ValueError("unverified_completed_state")
+    elif state.report is not None:
+        raise ValueError("premature_report")
 
 
 def build_graph(
@@ -209,6 +229,18 @@ def build_graph(
 
     def route(carrier: GraphState) -> str:
         state = decode(carrier["run"])
+        validate_state(state, pin)
+        if state.next_stage == "done":
+            request = ActionRequest(
+                operation="report.publish",
+                account_id=state.incident.account_id,
+                region=state.incident.region,
+                resource=state.incident.resource,
+                template="offline-investigation-v1",
+                result_limit=max(1, len(state.incident.observations)),
+                cost_microdollars=0,
+            )
+            broker.dispatch(context, request, policy, lambda _: None)
         if state.next_stage == "done" or (
             stop_after is not None and state.completed and state.completed[-1] == stop_after
         ):

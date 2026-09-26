@@ -68,6 +68,8 @@ class CheckpointStore:
     ) -> None:
         state = decode(state.model_dump(mode="json"))
         validate_state(state, state.pin)
+        if state.pin.policy_digest != content_digest(parse_json(policy.model_dump_json())):
+            raise ValueError("checkpoint_policy_mismatch")
         digest = state_digest(state)
         payload = canonical_bytes(parse_json(state.model_dump_json()))
         with self.authority.connect() as connection:

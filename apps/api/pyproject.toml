@@ -41,6 +41,7 @@ dev = [
 incident-api = "incident_investigator.main:run"
 incident-eval = "incident_investigator.evaluation.cli:app"
 incidentctl = "incident_investigator.security.cli:app"
+incident-replay = "incident_investigator.workflow.cli:app"
 
 [build-system]
 requires = ["hatchling>=1.27"]

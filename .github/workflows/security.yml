@@ -38,11 +38,11 @@ jobs:
         run: uv run --frozen --no-sync mypy apps/api/src
       - name: Test Linux security contracts with sockets disabled
         if: runner.os == 'Linux'
-        run: uv run --frozen --no-sync pytest apps/api/tests/security --disable-socket --allow-unix-socket
+        run: uv run --frozen --no-sync pytest apps/api/tests/security apps/api/tests/workflow --disable-socket --allow-unix-socket
       - name: Test Windows security contracts with only loopback allowed
         if: runner.os == 'Windows'
         # The Windows event loop uses a loopback socket pair internally.
-        run: uv run --frozen --no-sync pytest apps/api/tests/security --disable-socket --allow-hosts=127.0.0.1
+        run: uv run --frozen --no-sync pytest apps/api/tests/security apps/api/tests/workflow --disable-socket --allow-hosts=127.0.0.1
 
   browser-security:
     runs-on: ubuntu-latest

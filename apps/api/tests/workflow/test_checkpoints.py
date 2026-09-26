@@ -120,3 +120,49 @@ def test_concurrent_resumption_has_one_checkpoint_writer(runtime: OfflineRuntime
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sum(pool.map(write, range(2))) == 1
+
+
+def test_policy_and_schema_corruption_are_rejected(runtime: OfflineRuntime) -> None:
+    paused = runtime.start(incident(), attempt_id="a", stop_after="scope")
+    _, policy = runtime.store.load("a")
+    altered = policy.model_copy(update={"remaining_microdollars": 10})
+    with pytest.raises(ValueError, match="checkpoint_policy_mismatch"):
+        runtime.store.save(paused, altered, expected=None, now=100)
+    with runtime.authority.connect() as connection:
+        connection.execute(
+            "UPDATE workflow_attempts SET policy=? WHERE attempt_id=?",
+            (altered.model_dump_json().encode(), "a"),
+        )
+    with pytest.raises(ValueError, match="checkpoint_policy_mismatch"):
+        runtime.resume("a")
+
+
+def test_expired_policy_and_checkpoint_audit_failure(
+    runtime: OfflineRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paused = runtime.start(incident(), attempt_id="a", stop_after="scope")
+    _, policy = runtime.store.load("a")
+    expired = OfflineRuntime(runtime.authority, lambda: policy.expires_at)
+    with pytest.raises(OperationDenied, match="policy_expired"):
+        expired.resume("a")
+    assert runtime.store.load("a")[0] == paused
+    from incident_investigator.security.policy import SecurityContext
+
+    from .test_graph import execute
+
+    context = SecurityContext(
+        actor_id="local",
+        candidate_id=paused.pin.candidate_id,
+        policy_id=policy.id,
+        account_id=paused.incident.account_id,
+        region=paused.incident.region,
+    )
+    next_state = execute(paused, context, policy, stop_after="collect")
+
+    def fail(*args: object) -> None:
+        raise sqlite3.OperationalError("disk full")
+
+    monkeypatch.setattr(runtime.authority, "_append", fail)
+    with pytest.raises(sqlite3.OperationalError):
+        runtime.store.save(next_state, policy, expected=paused, now=100)
+    assert runtime.store.load("a")[0] == paused
