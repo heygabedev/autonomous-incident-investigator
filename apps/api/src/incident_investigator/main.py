@@ -4,6 +4,8 @@ import sqlite3
 import subprocess
 import sys
 import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -11,13 +13,19 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import Field
+from pydantic import Field, ValidationError
 from starlette.staticfiles import StaticFiles
 
 from incident_investigator import __version__
 from incident_investigator.evaluation.models import Contract
+from incident_investigator.jobs.api import router
+from incident_investigator.jobs.contracts import JobError
+from incident_investigator.jobs.service import JobService
+from incident_investigator.jobs.store import JobStore
+from incident_investigator.jobs.worker import Worker
 from incident_investigator.security.authority import AuditEvent, SecurityAuthority
 from incident_investigator.security.http import RuntimeSettings, SecurityBoundary
+from incident_investigator.security.policy import OperationDenied
 from incident_investigator.security.sessions import AccessError, Sessions
 
 
@@ -30,20 +38,53 @@ def create_app(
     sessions: Sessions | None = None,
     ui_directory: Path | None = None,
     authority: SecurityAuthority | None = None,
+    *,
+    start_worker: bool = True,
 ) -> FastAPI:
     settings = settings or RuntimeSettings()
     sessions = sessions or Sessions()
+    service = JobService(JobStore(authority)) if authority is not None else None
+    worker = Worker(service.store) if service is not None and start_worker else None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        if worker is not None:
+            worker.start()
+        try:
+            yield
+        finally:
+            if worker is not None:
+                worker.stop()
+
     app = FastAPI(
         title="Autonomous Incident Investigator",
         version=__version__,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
     app.add_middleware(SecurityBoundary, settings=settings, sessions=sessions)
-    # Future operation handlers must use this authority's broker; no API exposes
-    # containment changes, evaluation labels, or operating-system paths.
     app.state.security_authority = authority
+    app.state.jobs = service
+    app.include_router(router(service, sessions))
+
+    @app.exception_handler(JobError)
+    async def job_error(request: Request, exc: JobError) -> JSONResponse:
+        headers = {"Retry-After": "30"} if exc.status == 429 else None
+        return JSONResponse({"error": exc.code}, status_code=exc.status, headers=headers)
+
+    @app.exception_handler(OperationDenied)
+    async def operation_denied(request: Request, exc: OperationDenied) -> JSONResponse:
+        return JSONResponse({"error": "operation_restricted"}, status_code=403)
+
+    @app.exception_handler(ValidationError)
+    async def invalid_contract(request: Request, exc: ValidationError) -> JSONResponse:
+        return JSONResponse({"error": "invalid_request"}, status_code=422)
+
+    @app.exception_handler(sqlite3.Error)
+    async def storage_unavailable(request: Request, exc: sqlite3.Error) -> JSONResponse:
+        return JSONResponse({"error": "storage_unavailable"}, status_code=503)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
