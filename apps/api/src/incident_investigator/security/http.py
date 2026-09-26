@@ -55,6 +55,7 @@ class SecurityBoundary:
                 headers.extend(
                     [
                         (b"cache-control", b"no-store"),
+                        (b"x-incident-api-schema", b"1.0.0"),
                         (b"x-content-type-options", b"nosniff"),
                         (b"x-frame-options", b"DENY"),
                         (b"referrer-policy", b"no-referrer"),
@@ -73,7 +74,14 @@ class SecurityBoundary:
                             (b"access-control-allow-origin", origin.encode()),
                             (b"vary", b"Origin"),
                             (b"access-control-allow-methods", b"GET, POST, DELETE"),
-                            (b"access-control-allow-headers", b"Authorization, Content-Type"),
+                            (
+                                b"access-control-allow-headers",
+                                b"Authorization, Content-Type, Last-Event-ID",
+                            ),
+                            (
+                                b"access-control-expose-headers",
+                                b"X-Incident-API-Schema, X-Incident-Event-Schema",
+                            ),
                         ]
                     )
                 message["headers"] = headers
@@ -100,6 +108,7 @@ class SecurityBoundary:
                     b"content-encoding",
                     b"sec-fetch-site",
                     b"transfer-encoding",
+                    b"last-event-id",
                 ):
                     raise AccessError(400, "ambiguous_headers")
                 headers[key] = value
