@@ -185,9 +185,13 @@ def test_lifespan_runs_worker_without_blocking_health(tmp_path: Path) -> None:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             assert client.get("/api/v1/health/live").status_code == 200
-            result = client.get(f"{ROOT}/{job['id']}").json()
+            response = client.get(f"{ROOT}/{job['id']}")
+            assert response.status_code == 200, response.text
+            result = response.json()
+            assert result["status"] not in ("failed", "cancelled"), result
             if result["status"] == "succeeded":
                 break
-            time.sleep(0.05)
+            # Stay below the real session rate limit, including under coverage in CI.
+            time.sleep(0.2)
         else:
             pytest.fail("fixture worker did not finish")

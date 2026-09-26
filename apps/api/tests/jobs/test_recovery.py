@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -60,7 +61,7 @@ def test_backup_restores_to_new_store_without_touching_failed_source(tmp_path: P
     job = submit(store)
     backup = next(authority.root.glob("before-jobs-v1-*.sqlite3"))
     restored = SecurityAuthority(tmp_path / "restored")
-    with sqlite3.connect(backup) as source, restored.connect() as target:
+    with closing(sqlite3.connect(backup)) as source, restored.connect() as target:
         source.backup(target)
     # A restore must reconcile newer revocations before any cutover. No cutover API exists.
     authority.change("revoke", candidate_id="revoked-after-backup")
