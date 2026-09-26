@@ -13,7 +13,7 @@ from incident_investigator.evaluation.golden import IncidentInput
 from incident_investigator.security.authority import SecurityAuthority
 from incident_investigator.security.policy import ActionRequest, SecurityContext, SecurityPolicy
 from incident_investigator.workflow.checkpoints import CheckpointStore
-from incident_investigator.workflow.contracts import RunPin, RunState, Stage
+from incident_investigator.workflow.contracts import ReplayInput, RunPin, RunState, Stage
 from incident_investigator.workflow.graph import build_graph, invoke, make_report, validate_state
 from incident_investigator.workflow.replay import prepare
 
@@ -77,7 +77,14 @@ class OfflineRuntime:
         round_limit: int = 2,
         stop_after: Stage | None = None,
     ) -> RunState:
-        ready = prepare(incident)
+        state, policy = self.initialize(prepare(incident), attempt_id, round_limit)
+        self.store.save(state, policy, expected=None, now=self.clock())
+        return self._execute(state, policy, stop_after)
+
+    def initialize(
+        self, ready: ReplayInput, attempt_id: str | None = None, round_limit: int = 2
+    ) -> tuple[RunState, SecurityPolicy]:
+        ready = ReplayInput.model_validate_json(ready.model_dump_json())
         policy = SecurityPolicy(
             id="offline-investigation-v1",
             revision=1,
@@ -97,8 +104,7 @@ class OfflineRuntime:
             incident=ready,
             round_limit=round_limit,
         )
-        self.store.save(state, policy, expected=None, now=self.clock())
-        return self._execute(state, policy, stop_after)
+        return state, policy
 
     def resume(self, attempt_id: str, *, stop_after: Stage | None = None) -> RunState:
         state, policy = self.store.load(attempt_id)
