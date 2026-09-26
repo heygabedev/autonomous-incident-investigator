@@ -57,7 +57,7 @@ def test_submit_progress_report_export_and_recall(client: TestClient) -> None:
     assert exported.content == response.content
     assert exported.headers["content-disposition"].startswith("attachment;")
     assert (
-        client.post(path + "/report/recall", json={"reason": "security_review"}).status_code == 200
+        client.post(path + "/report/recall", json={"reason": "operator_request"}).status_code == 200
     )
     assert client.get(path + "/report/export").status_code == 409
     replay = client.post(path + "/replays", json={"idempotency_key": "b" * 32})
