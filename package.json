@@ -1,0 +1,18 @@
+{
+  "name": "autonomous-incident-investigator",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @incident-investigator/web",
+    "dev": "npm run dev --workspace @incident-investigator/web",
+    "lint": "npm run lint --workspace @incident-investigator/web",
+    "test": "npm run test --workspace @incident-investigator/web",
+    "typecheck": "npm run typecheck --workspace @incident-investigator/web"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  }
+}
