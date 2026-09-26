@@ -12,7 +12,7 @@ from incident_investigator.evaluation.canonical import JSONValue, content_digest
 from incident_investigator.evaluation.golden import IncidentInput
 from incident_investigator.security.authority import SecurityAuthority
 from incident_investigator.security.policy import ActionRequest, SecurityContext, SecurityPolicy
-from incident_investigator.workflow.checkpoints import CheckpointStore
+from incident_investigator.workflow.checkpoints import CheckpointGuard, CheckpointStore
 from incident_investigator.workflow.contracts import ReplayInput, RunPin, RunState, Stage
 from incident_investigator.workflow.graph import build_graph, invoke, make_report, validate_state
 from incident_investigator.workflow.replay import prepare
@@ -63,11 +63,15 @@ def offline_pin(policy: SecurityPolicy) -> RunPin:
 
 class OfflineRuntime:
     def __init__(
-        self, authority: SecurityAuthority, clock: Callable[[], int] | None = None
+        self,
+        authority: SecurityAuthority,
+        clock: Callable[[], int] | None = None,
+        guard: CheckpointGuard | None = None,
     ) -> None:
         self.authority = authority
         self.store = CheckpointStore(authority)
         self.clock = clock or (lambda: int(time.time()))
+        self.guard = guard
 
     def start(
         self,
@@ -78,7 +82,14 @@ class OfflineRuntime:
         stop_after: Stage | None = None,
     ) -> RunState:
         state, policy = self.initialize(prepare(incident), attempt_id, round_limit)
-        self.store.save(state, policy, expected=None, now=self.clock())
+        return self.begin(state, policy, stop_after=stop_after)
+
+    def begin(
+        self, state: RunState, policy: SecurityPolicy, *, stop_after: Stage | None = None
+    ) -> RunState:
+        if state.pin != offline_pin(policy):
+            raise ValueError("checkpoint_runtime_mismatch")
+        self.store.save(state, policy, expected=None, now=self.clock(), guard=self.guard)
         return self._execute(state, policy, stop_after)
 
     def initialize(
@@ -127,7 +138,9 @@ class OfflineRuntime:
         previous = [state]
 
         def checkpoint(next_state: RunState) -> None:
-            self.store.save(next_state, policy, expected=previous[0], now=self.clock())
+            self.store.save(
+                next_state, policy, expected=previous[0], now=self.clock(), guard=self.guard
+            )
             previous[0] = next_state
 
         result = invoke(

@@ -39,6 +39,7 @@ class JobView(Contract):
     updated_at: Annotated[int, Field(ge=0)]
     stage: Stage = "scope"
     completed_steps: Annotated[int, Field(ge=0, le=20)] = 0
+    dispatch_attempts: Annotated[int, Field(ge=0, le=3)] = 0
     failure: Failure | None = None
     replay_of: JobId | None = None
     report_status: Literal["none", "available", "recalled", "superseded"] = "none"
