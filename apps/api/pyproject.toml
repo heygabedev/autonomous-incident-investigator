@@ -9,6 +9,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "langgraph>=1.0,<2",
+  "langsmith>=0.14,<1",
   "orjson>=3.10,<4",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
@@ -40,6 +41,7 @@ dev = [
 incident-api = "incident_investigator.main:run"
 incident-eval = "incident_investigator.evaluation.cli:app"
 incidentctl = "incident_investigator.security.cli:app"
+incident-replay = "incident_investigator.workflow.cli:app"
 
 [build-system]
 requires = ["hatchling>=1.27"]

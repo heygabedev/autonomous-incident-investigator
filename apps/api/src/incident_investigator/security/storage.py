@@ -12,14 +12,18 @@ def local_path(path: Path) -> Path:
         raise ValueError("local_path_required")
     absolute = path.absolute()
     for item in (*reversed(absolute.parents), absolute):
-        if item.is_symlink() or item.is_junction():
-            raise ValueError("linked_storage_not_supported")
-        if item.exists():
+        try:
             info = item.stat(follow_symlinks=False)
-            if getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
-                raise ValueError("reparse_storage_not_supported")
-            if item.is_file() and info.st_nlink != 1:
-                raise ValueError("linked_storage_not_supported")
+        except FileNotFoundError:
+            # SQLite can remove WAL/SHM sidecars as its last connection closes.
+            # Inspect one metadata snapshot rather than exists() followed by stat().
+            continue
+        if stat.S_ISLNK(info.st_mode):
+            raise ValueError("linked_storage_not_supported")
+        if getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ValueError("reparse_storage_not_supported")
+        if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            raise ValueError("linked_storage_not_supported")
     return absolute
 
 
