@@ -22,11 +22,14 @@ from incident_investigator.jobs.store import JobStore
 from incident_investigator.security.authority import AuditEvent
 from incident_investigator.security.sessions import AccessError, Sessions
 
+STREAM_SECONDS = 30
+SEND_SECONDS = 5
+
 
 async def events(
     store: JobStore, sessions: Sessions, token: str, identifier: str, cursor: int
 ) -> AsyncIterator[bytes]:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + STREAM_SECONDS
     heartbeat = time.monotonic()
     while time.monotonic() < deadline:
         try:
@@ -64,12 +67,13 @@ class SessionStream(StreamingResponse):
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         async def bounded_send(message: Message) -> None:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(SEND_SECONDS):
                 await send(message)
 
         # Reserve before response headers; always release on disconnect or cancellation.
         with self.sessions.stream(self.token):
-            await super().__call__(scope, receive, bounded_send)
+            async with asyncio.timeout(STREAM_SECONDS):
+                await super().__call__(scope, receive, bounded_send)
 
 
 def router(service: JobService | None, sessions: Sessions) -> APIRouter:
