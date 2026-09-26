@@ -6,6 +6,7 @@ from incident_investigator.jobs.api import SessionStream, events
 from incident_investigator.jobs.store import JobStore
 from incident_investigator.security.authority import SecurityAuthority
 from incident_investigator.security.sessions import AccessError, Sessions
+from starlette.requests import ClientDisconnect
 
 from .test_store import submit
 
@@ -52,8 +53,6 @@ async def test_stream_slots_are_reserved_before_headers_and_released_on_disconne
         with pytest.raises(AccessError) as error:
             await SessionStream(store, sessions, token, job.id, 0)(scope, receive, send)
         assert error.value.status == 429 and sent == []
-    from starlette.requests import ClientDisconnect
-
     with pytest.raises(ClientDisconnect):
         await SessionStream(store, sessions, token, job.id, 0)(scope, receive, send)
     with sessions.stream(token), sessions.stream(token):
@@ -84,5 +83,31 @@ async def test_cancellation_releases_stream_slot(tmp_path: Path) -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    with sessions.stream(token), sessions.stream(token):
+        pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deadline", ["STREAM_SECONDS", "SEND_SECONDS"])
+async def test_backpressure_cannot_keep_stream_reservations_alive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, deadline: str
+) -> None:
+    sessions = Sessions()
+    token = sessions.redeem(sessions.issue_pairing())
+    store = JobStore(SecurityAuthority(tmp_path / "runtime"), lambda: 100)
+    job = submit(store)
+    monkeypatch.setattr(f"incident_investigator.jobs.api.{deadline}", 0.01)
+
+    async def receive():
+        await asyncio.Event().wait()
+
+    async def send(message):
+        await asyncio.Event().wait()
+
+    expected = TimeoutError if deadline == "STREAM_SECONDS" else ClientDisconnect
+    with pytest.raises(expected):
+        await SessionStream(store, sessions, token, job.id, 0)(
+            {"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send
+        )
     with sessions.stream(token), sessions.stream(token):
         pass
