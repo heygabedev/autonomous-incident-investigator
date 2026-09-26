@@ -14,8 +14,9 @@ from starlette.staticfiles import StaticFiles
 
 from incident_investigator import __version__
 from incident_investigator.evaluation.models import Contract
+from incident_investigator.security.authority import AuditEvent, SecurityAuthority
 from incident_investigator.security.http import RuntimeSettings, SecurityBoundary
-from incident_investigator.security.sessions import Sessions
+from incident_investigator.security.sessions import AccessError, Sessions
 
 
 class PairingRequest(Contract):
@@ -26,6 +27,7 @@ def create_app(
     settings: RuntimeSettings | None = None,
     sessions: Sessions | None = None,
     ui_directory: Path | None = None,
+    authority: SecurityAuthority | None = None,
 ) -> FastAPI:
     settings = settings or RuntimeSettings()
     sessions = sessions or Sessions()
@@ -37,6 +39,9 @@ def create_app(
         openapi_url=None,
     )
     app.add_middleware(SecurityBoundary, settings=settings, sessions=sessions)
+    # Future operation handlers must use this authority's broker; no API exposes
+    # containment changes, evaluation labels, or operating-system paths.
+    app.state.security_authority = authority
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -76,16 +81,35 @@ def create_app(
 
 def run() -> None:
     settings = RuntimeSettings()
-    sessions = Sessions()
+    authority = SecurityAuthority(settings.data_dir)
+
+    def session_audit(action: str, actor: str) -> None:
+        authority.record(
+            AuditEvent(
+                actor_id=actor,
+                action=action,
+                decision="allow",
+                reason="local_session",
+                policy_revision=authority.read().revision,
+            )
+        )
+
+    sessions = Sessions(audit=session_audit)
     ui = Path("apps/web/dist")
-    application = create_app(settings, sessions, ui if ui.is_dir() else None)
+    application = create_app(settings, sessions, ui if ui.is_dir() else None, authority)
 
     def terminal() -> None:
-        print("Pairing code (expires in five minutes):", sessions.issue_pairing())
+        def issue() -> None:
+            try:
+                print("Pairing code (expires in five minutes):", sessions.issue_pairing())
+            except AccessError:
+                print("Pairing unavailable: security audit storage is unavailable.")
+
+        issue()
         print("Type 'pair' to issue a new code. Codes are not recorded in application logs.")
         for command in sys.stdin:
             if command.strip() == "pair":
-                print("Pairing code (expires in five minutes):", sessions.issue_pairing())
+                issue()
 
     if sys.stdin.isatty() and sys.stdout.isatty():
         threading.Thread(target=terminal, daemon=True).start()
@@ -97,4 +121,6 @@ def run() -> None:
         access_log=False,
         proxy_headers=False,
         server_header=False,
+        limit_concurrency=64,
+        timeout_keep_alive=5,
     )

@@ -32,16 +32,29 @@ class Session:
 
 
 class Sessions:
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.monotonic,
+        audit: Callable[[str, str], None] | None = None,
+    ) -> None:
         self.clock = clock
+        self.audit = audit
         self._lock = threading.RLock()
         self._pairing: tuple[str, float] | None = None
         self._attempts: deque[float] = deque()
         self._sessions: dict[str, Session] = {}
 
+    def _record(self, action: str, actor: str) -> None:
+        if self.audit is not None:
+            try:
+                self.audit(action, actor)
+            except Exception:
+                raise AccessError(503, "audit_unavailable") from None
+
     def issue_pairing(self) -> str:
         secret = secrets.token_urlsafe(32)
         with self._lock:
+            self._record("pairing.issue", "local-operator")
             self._pairing = (digest(secret), self.clock() + 300)
         return secret
 
@@ -65,10 +78,12 @@ class Sessions:
             self._purge()
             if len(self._sessions) >= 32:
                 raise AccessError(429, "session_limit", 60)
+            identifier = secrets.token_hex(16)
+            self._record("session.create", identifier)
             self._pairing = None
             token = secrets.token_urlsafe(32)
             now = self.clock()
-            self._sessions[digest(token)] = Session(secrets.token_hex(16), now, now)
+            self._sessions[digest(token)] = Session(identifier, now, now)
             return token
 
     def _purge(self) -> None:
@@ -90,7 +105,9 @@ class Sessions:
 
     def revoke(self, token: str) -> None:
         with self._lock:
-            self._sessions.pop(digest(token), None)
+            session = self._sessions.pop(digest(token), None)
+            if session is not None:
+                self._record("session.revoke", session.id)
 
     @contextmanager
     def stream(self, token: str) -> Iterator[None]:

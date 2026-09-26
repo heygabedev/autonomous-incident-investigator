@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
@@ -18,6 +19,7 @@ class RuntimeSettings(BaseSettings):
     api_port: int = Field(default=8000, ge=1024, le=65535)
     app_mode: Literal["fixture"] = "fixture"
     development: bool = False
+    data_dir: Path = Path(".data/runtime")
 
     @property
     def origin(self) -> str:
@@ -88,6 +90,8 @@ class SecurityBoundary:
                     b"authorization",
                     b"content-length",
                     b"content-type",
+                    b"content-encoding",
+                    b"sec-fetch-site",
                 ):
                     raise AccessError(400, "ambiguous_headers")
                 headers[key] = value
@@ -150,15 +154,21 @@ class SecurityBoundary:
 
             await self.app(scope, replay, secured_send)
         except AccessError as exc:
+            if started:
+                return
             extra = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
             await JSONResponse({"error": exc.code}, status_code=exc.status, headers=extra)(
                 scope, receive, secured_send
             )
         except (ValueError, UnicodeError):
+            if started:
+                return
             await JSONResponse({"error": "invalid_request"}, status_code=400)(
                 scope, receive, secured_send
             )
         except TimeoutError:
+            if started:
+                return
             await JSONResponse({"error": "request_timeout"}, status_code=408)(
                 scope, receive, secured_send
             )

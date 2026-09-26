@@ -1,5 +1,6 @@
 """Sanitization and sink gates. Unknown free-text formats are omitted, not certified safe."""
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Annotated, Literal, cast
@@ -74,12 +75,16 @@ def sanitize(
         return omitted("scope_denied")
     if len(raw.fields) > 100:
         return omitted("unsupported_payload")
+    if redact(raw.resource) != raw.resource or any(ord(c) < 32 for c in raw.resource):
+        return omitted("unsupported_payload")
     values: list[EvidenceField] = []
     for name in sorted(ALLOWED_FIELDS):
         value = raw.fields.get(name)
         if value is None:
             continue
         if type(value) not in (str, int, float) or len(str(value)) > 256:
+            return omitted("unsupported_payload")
+        if isinstance(value, float) and not math.isfinite(value):
             return omitted("unsupported_payload")
         cleaned = redact(str(value))
         # Structured tokens only. Omit hidden controls, encoded blobs, and prose.

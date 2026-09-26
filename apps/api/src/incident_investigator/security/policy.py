@@ -36,13 +36,13 @@ class SecurityPolicy(Contract):
     expires_at: Annotated[int, Field(ge=0)]
     account_id: Account
     region: Identifier
-    resources: tuple[Resource, ...]
-    operations: tuple[Identifier, ...]
-    templates: tuple[Identifier, ...]
+    resources: Annotated[tuple[Resource, ...], Field(max_length=1000)]
+    operations: Annotated[tuple[Identifier, ...], Field(max_length=100)]
+    templates: Annotated[tuple[Identifier, ...], Field(max_length=100)]
     result_limit: Annotated[int, Field(ge=0, le=1000)]
     remaining_microdollars: Annotated[int, Field(ge=0, le=500_000)]
-    disabled_features: tuple[Feature, ...] = ()
-    revoked_candidates: tuple[Identifier, ...] = ()
+    disabled_features: Annotated[tuple[Feature, ...], Field(max_length=4)] = ()
+    revoked_candidates: Annotated[tuple[Identifier, ...], Field(max_length=1000)] = ()
     safe_mode: bool = False
 
 
@@ -140,9 +140,12 @@ class Broker:
         context = SecurityContext.model_validate_json(context.model_dump_json())
         request = ActionRequest.model_validate_json(request.model_dump_json())
         pinned = SecurityPolicy.model_validate_json(pinned.model_dump_json())
-        current = self.current_policy()
-        if current is not None:
-            current = SecurityPolicy.model_validate_json(current.model_dump_json())
+        try:
+            current = self.current_policy()
+            if current is not None:
+                current = SecurityPolicy.model_validate_json(current.model_dump_json())
+        except Exception:
+            current = None
         decision = authorize(context, request, pinned, current, self.clock())
         try:
             self.record_intent(context, request, decision)
@@ -151,7 +154,10 @@ class Broker:
         if not decision.allowed:
             raise OperationDenied(decision.reason)
         # An intent is not a lease over future governance: refuse a changed view.
-        latest = self.current_policy()
+        try:
+            latest = self.current_policy()
+        except Exception:
+            raise OperationDenied("policy_unavailable") from None
         if latest != current:
             raise OperationDenied("policy_changed")
         if not authorize(context, request, pinned, latest, self.clock()).allowed:
