@@ -1,5 +1,6 @@
 """Real Chromium + packaged UI + API; no AWS, remote requests or saved browser traces."""
 
+import json
 import socket
 import threading
 import time
@@ -76,7 +77,7 @@ def test_pairing_is_memory_only_and_logout_revokes(
     with page.expect_response("**/api/v1/session") as exchanged:
         page.get_by_role("button", name="Unlock console").click()
     token = exchanged.value.json()["token"]
-    expect(page.get_by_role("heading", name="Foundation ready")).to_be_visible()
+    expect(page.get_by_role("heading", name="Start with the evidence.")).to_be_visible()
     assert page.evaluate("() => [localStorage.length, sessionStorage.length]") == [0, 0]
     assert page.context.cookies() == []
     assert not any(secret in item or token in item for item in requests + messages)
@@ -90,7 +91,7 @@ def test_pairing_is_memory_only_and_logout_revokes(
     )
     page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
     page.get_by_role("button", name="Unlock console").click()
-    expect(page.get_by_role("heading", name="Foundation ready")).to_be_visible()
+    expect(page.get_by_role("heading", name="Start with the evidence.")).to_be_visible()
     page.reload()
     expect(page.get_by_role("button", name="Unlock console")).to_be_visible()
 
@@ -179,3 +180,54 @@ def test_browser_can_investigate_stream_export_and_recall(
     assert (result["recalled"], result["denied"], result["revoked"]) == (200, 409, 401)
     assert result["saved"] == [0, 0] and not result["leaked"]
     assert page.context.cookies() == []
+
+
+def test_console_fixture_report_export_replay_and_recall(
+    page: Page, server: tuple[str, Sessions], tmp_path: Path
+) -> None:
+    origin, sessions = server
+    page.goto(origin)
+    page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
+    page.get_by_role("button", name="Unlock console").click()
+    page.get_by_role("button", name="Start investigation").click()
+    expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
+    expect(
+        page.get_by_role("heading", name="missing required environment variable")
+    ).to_be_visible()
+    expect(
+        page.get_by_text("Operator review required. This console cannot execute remediation.")
+    ).to_be_visible()
+    page.get_by_role("link", name="Source 1").first.click()
+    expect(page.locator(".evidence:focus")).to_be_visible()
+    with page.expect_download() as downloaded:
+        page.get_by_role("button", name="Export verified report").click()
+    destination = tmp_path / "report.json"
+    downloaded.value.save_as(destination)
+    report = json.loads(destination.read_text())
+    assert report["status"] == "resolved" and report["model_calls"] == 0
+    assert report["attempt_id"] in downloaded.value.suggested_filename
+    page.get_by_role("button", name="Replay captured evidence").click()
+    expect(
+        page.get_by_text("using captured evidence, not a fresh collection.", exact=False)
+    ).to_be_visible(timeout=20_000)
+    expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
+    page.get_by_role("button", name="Recall report", exact=True).click()
+    page.get_by_role("button", name="Confirm recall").click()
+    expect(page.get_by_text("Report withdrawn:", exact=False)).to_be_visible()
+    expect(page.get_by_role("heading", name="Cause assessment")).not_to_be_visible()
+    expect(page.get_by_role("button", name="Export verified report")).not_to_be_visible()
+    page.get_by_role("button", name="Lock console").click()
+    expect(page.get_by_role("heading", name="Evidence register", exact=False)).not_to_be_visible()
+    expect(page.get_by_role("button", name="Unlock console")).to_be_visible()
+
+
+def test_console_incomplete_telemetry_abstains(page: Page, server: tuple[str, Sessions]) -> None:
+    origin, sessions = server
+    page.goto(origin)
+    page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
+    page.get_by_role("button", name="Unlock console").click()
+    page.get_by_role("radio", name="Limited telemetry", exact=False).check()
+    page.get_by_role("button", name="Start investigation").click()
+    expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
+    expect(page.get_by_text("No action is recommended with the current evidence.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Coverage gaps")).to_be_visible()
