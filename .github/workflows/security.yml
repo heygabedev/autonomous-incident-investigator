@@ -74,6 +74,7 @@ jobs:
         run: |
           sudo unshare --net -- sh -c 'ip link set lo up && exec "$@"' sh \
             setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --no-new-privs \
+            --reset-env \
             "$GITHUB_WORKSPACE/.venv/bin/python" -m pytest tests/browser
 
   codeql:
