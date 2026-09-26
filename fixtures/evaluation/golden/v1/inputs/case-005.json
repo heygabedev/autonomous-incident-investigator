@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "source": "synthetic",
+  "account_id": "000000000000",
+  "region": "eu-central-1",
+  "window_start": "2025-01-15T10:00:00Z",
+  "window_end": "2025-01-15T10:15:00Z",
+  "investigation_cutoff": "2025-01-15T10:20:00Z",
+  "case_id": "case-005",
+  "workload": "lambda_serverless",
+  "resource": "synthetic-notification-handler",
+  "evidence": [
+    {
+      "id": "ev-001",
+      "modality": "metric",
+      "provenance_group": "lambda-monitoring",
+      "occurred_at": "2025-01-15T10:06:00Z",
+      "observed_at": "2025-01-15T10:06:30Z",
+      "coverage": "complete",
+      "text": "Handler Errors increased from 0 to 60 while Invocations remained near 600 per minute. Duration and concurrency remained within their prior ranges."
+    },
+    {
+      "id": "ev-002",
+      "modality": "log",
+      "provenance_group": "logs-collector",
+      "occurred_at": "2025-01-15T10:07:00Z",
+      "observed_at": "2025-01-15T10:07:30Z",
+      "coverage": "permission_denied",
+      "text": "Collector could not read the handler log group: permission denied. No application log records were returned."
+    },
+    {
+      "id": "ev-003",
+      "modality": "trace",
+      "provenance_group": "traces-collector",
+      "occurred_at": "2025-01-15T10:07:00Z",
+      "observed_at": "2025-01-15T10:07:30Z",
+      "coverage": "unavailable",
+      "text": "No trace data is available for this incident window."
+    }
+  ]
+}

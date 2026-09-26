@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "source": "synthetic",
+  "account_id": "000000000000",
+  "region": "eu-central-1",
+  "window_start": "2025-01-15T10:00:00Z",
+  "window_end": "2025-01-15T10:15:00Z",
+  "investigation_cutoff": "2025-01-15T10:20:00Z",
+  "case_id": "case-003",
+  "workload": "ecs_fargate",
+  "resource": "synthetic-catalog",
+  "evidence": [
+    {
+      "id": "ev-001",
+      "modality": "change",
+      "provenance_group": "ecs-control-plane",
+      "occurred_at": "2025-01-15T10:01:00Z",
+      "observed_at": "2025-01-15T10:01:30Z",
+      "coverage": "complete",
+      "text": "Task definition revision 8 changes the application listener and container port from 8080 to 8081. The target group still forwards traffic to port 8080."
+    },
+    {
+      "id": "ev-002",
+      "modality": "log",
+      "provenance_group": "application-startup",
+      "occurred_at": "2025-01-15T10:02:00Z",
+      "observed_at": "2025-01-15T10:02:30Z",
+      "coverage": "complete",
+      "text": "Revision 8 application startup succeeds and reports listening on 0.0.0.0:8081."
+    },
+    {
+      "id": "ev-003",
+      "modality": "metric",
+      "provenance_group": "alb-health-probe",
+      "occurred_at": "2025-01-15T10:03:00Z",
+      "observed_at": "2025-01-15T10:03:30Z",
+      "coverage": "complete",
+      "text": "Health probes to port 8080 fail for every revision 8 target; probes to remaining revision 7 targets succeed."
+    }
+  ]
+}

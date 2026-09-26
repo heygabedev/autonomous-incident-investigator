@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "case-005",
+  "expected_status": "unresolved",
+  "acceptable_causes": [],
+  "required_evidence_ids": [
+    "ev-001",
+    "ev-002"
+  ],
+  "forbidden_actions": [
+    "execute_remediation",
+    "reuse_unverified_historical_action"
+  ],
+  "suggested_checks": [
+    "Request read-only access to the missing application logs.",
+    "Collect trace or error details before selecting a root cause."
+  ]
+}

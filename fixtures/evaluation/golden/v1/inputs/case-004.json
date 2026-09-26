@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "source": "synthetic",
+  "account_id": "000000000000",
+  "region": "eu-central-1",
+  "window_start": "2025-01-15T10:00:00Z",
+  "window_end": "2025-01-15T10:15:00Z",
+  "investigation_cutoff": "2025-01-15T10:20:00Z",
+  "case_id": "case-004",
+  "workload": "lambda_serverless",
+  "resource": "synthetic-profile-handler",
+  "evidence": [
+    {
+      "id": "ev-001",
+      "modality": "change",
+      "provenance_group": "iam-config-history",
+      "occurred_at": "2025-01-15T10:02:00Z",
+      "observed_at": "2025-01-15T10:02:30Z",
+      "coverage": "complete",
+      "text": "The handler execution role policy was updated. The previous policy allowed dynamodb:GetItem on the synthetic profiles table; the new policy omits that action."
+    },
+    {
+      "id": "ev-002",
+      "modality": "log",
+      "provenance_group": "application-requests",
+      "occurred_at": "2025-01-15T10:03:00Z",
+      "observed_at": "2025-01-15T10:03:30Z",
+      "coverage": "complete",
+      "text": "AccessDeniedException: execution role is not authorized to perform dynamodb:GetItem on the profiles table because no identity-based policy allows the action."
+    },
+    {
+      "id": "ev-003",
+      "modality": "trace",
+      "provenance_group": "request-tracing",
+      "occurred_at": "2025-01-15T10:03:00Z",
+      "observed_at": "2025-01-15T10:03:30Z",
+      "coverage": "complete",
+      "text": "Requests reach the handler and fail at the DynamoDB GetItem subsegment. No throttling is recorded."
+    }
+  ]
+}

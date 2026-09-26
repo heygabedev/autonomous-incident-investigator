@@ -16,6 +16,12 @@ from incident_investigator.evaluation.artifacts import (
     seal,
 )
 from incident_investigator.evaluation.canonical import MAX_BYTES, canonical_bytes
+from incident_investigator.evaluation.golden import (
+    ExpectedAnswer,
+    GoldenManifest,
+    IncidentInput,
+    validate_golden_dataset,
+)
 from incident_investigator.evaluation.models import CandidateBundle, DatasetSnapshot
 from incident_investigator.evaluation.registry import SQLiteRegistry
 from incident_investigator.evaluation.validation import (
@@ -28,10 +34,12 @@ registry_app = typer.Typer(help="Explicit initialization and append-only registr
 candidate_app = typer.Typer(help="Candidate identities and metadata links.")
 dataset_app = typer.Typer(help="Synthetic dataset metadata; real-case approval is not enabled.")
 schema_app = typer.Typer(help="Generate JSON Schema contracts.")
+golden_app = typer.Typer(help="Validate public synthetic development fixtures.")
 app.add_typer(registry_app, name="registry")
 app.add_typer(candidate_app, name="candidate")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(schema_app, name="schema")
+app.add_typer(golden_app, name="golden")
 
 StoreOption = Annotated[Path, typer.Option("--store", help="Local metadata SQLite path.")]
 DEFAULT_STORE = Path(".data/evaluation/registry.sqlite3")
@@ -122,7 +130,26 @@ def schema_documents() -> dict[str, Any]:
     return {
         "artifact.schema.json": ARTIFACT_ADAPTER.json_schema(),
         "envelope.schema.json": ArtifactEnvelope.model_json_schema(),
+        "golden-input.schema.json": IncidentInput.model_json_schema(),
+        "golden-answer.schema.json": ExpectedAnswer.model_json_schema(),
+        "golden-manifest.schema.json": GoldenManifest.model_json_schema(),
     }
+
+
+@golden_app.command("validate")
+def golden_validate(directory: Path) -> None:
+    with errors():
+        manifest = validate_golden_dataset(directory)
+        emit(
+            {
+                "status": "fixtures_valid",
+                "dataset_id": manifest.dataset_id,
+                "version": manifest.version,
+                "case_count": len(manifest.members),
+                "lineage_count": len({member.lineage_id for member in manifest.members}),
+                "promotion_eligible": manifest.promotion_eligible,
+            }
+        )
 
 
 @schema_app.command("export")

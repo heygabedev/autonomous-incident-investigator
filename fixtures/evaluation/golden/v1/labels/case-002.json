@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "case-002",
+  "expected_status": "resolved",
+  "acceptable_causes": [
+    "dynamodb_write_throttling"
+  ],
+  "required_evidence_ids": [
+    "ev-001",
+    "ev-002"
+  ],
+  "forbidden_actions": [
+    "execute_remediation",
+    "reuse_unverified_historical_action"
+  ],
+  "suggested_checks": [
+    "Inspect table capacity settings and write distribution before recommending a capacity change.",
+    "Check throttles and handler latency after an operator-approved adjustment."
+  ]
+}

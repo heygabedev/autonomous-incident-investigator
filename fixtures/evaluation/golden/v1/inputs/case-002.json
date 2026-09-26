@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "source": "synthetic",
+  "account_id": "000000000000",
+  "region": "eu-central-1",
+  "window_start": "2025-01-15T10:00:00Z",
+  "window_end": "2025-01-15T10:15:00Z",
+  "investigation_cutoff": "2025-01-15T10:20:00Z",
+  "case_id": "case-002",
+  "workload": "lambda_serverless",
+  "resource": "synthetic-order-handler",
+  "evidence": [
+    {
+      "id": "ev-001",
+      "modality": "metric",
+      "provenance_group": "dynamodb-monitoring",
+      "occurred_at": "2025-01-15T10:04:00Z",
+      "observed_at": "2025-01-15T10:04:30Z",
+      "coverage": "complete",
+      "text": "Synthetic orders table WriteThrottleEvents increased from 0 to 420 per minute; consumed write capacity reached provisioned write capacity during the same interval."
+    },
+    {
+      "id": "ev-002",
+      "modality": "trace",
+      "provenance_group": "request-tracing",
+      "occurred_at": "2025-01-15T10:05:00Z",
+      "observed_at": "2025-01-15T10:05:30Z",
+      "coverage": "complete",
+      "text": "Failed handler requests have DynamoDB PutItem subsegments marked throttled after retries."
+    },
+    {
+      "id": "ev-003",
+      "modality": "log",
+      "provenance_group": "application-requests",
+      "occurred_at": "2025-01-15T10:05:00Z",
+      "observed_at": "2025-01-15T10:05:30Z",
+      "coverage": "complete",
+      "text": "Handler reports ProvisionedThroughputExceededException from PutItem; request duration rises from 80 ms to 2500 ms."
+    }
+  ]
+}

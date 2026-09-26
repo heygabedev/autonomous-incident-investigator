@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "synthetic-golden",
+  "version": "1.0.0",
+  "source": "synthetic",
+  "permitted_use": "development",
+  "promotion_eligible": false,
+  "members": [
+    {
+      "case_id": "case-001",
+      "lineage_id": "lineage-001",
+      "duplicate_cluster_id": "cluster-001",
+      "split": "dev",
+      "input_digest": "sha256:3edad1fd275c8867a9d47d1dac93314c48ab510885bc6681816c25a79edc09f5",
+      "labels_digest": "sha256:37482ea363c122d13b789d85073af39080daa584efbb86ee9b51216c31c433d2"
+    },
+    {
+      "case_id": "case-002",
+      "lineage_id": "lineage-002",
+      "duplicate_cluster_id": "cluster-002",
+      "split": "dev",
+      "input_digest": "sha256:4d25fa9f2e9f81612cdd27c253c69d913003dbf7defcecf7196069ae2fd4ffa6",
+      "labels_digest": "sha256:27a014c0d293d5aac8b8d688f0d569e8ca02ff3c6805a1aac94144c540383ad9"
+    },
+    {
+      "case_id": "case-003",
+      "lineage_id": "lineage-003",
+      "duplicate_cluster_id": "cluster-003",
+      "split": "dev",
+      "input_digest": "sha256:1943b296c9281d0f1c28347efeb18e619819ef36478b9734cd259c2b58d12cf5",
+      "labels_digest": "sha256:e8d4aa98cb24e3d9e3f04ca23b3010fa5db0b5712a25833707a1d6d53e2312c2"
+    },
+    {
+      "case_id": "case-004",
+      "lineage_id": "lineage-004",
+      "duplicate_cluster_id": "cluster-004",
+      "split": "dev",
+      "input_digest": "sha256:f424da3aa8132353ce4d0f7774d1cc1f23fa8f44071c8ebb4480c52abd74f77b",
+      "labels_digest": "sha256:aeb943d1bbfeefb3dd7cca5232ad85d43059a5bea908e60060efcaa90bf7136a"
+    },
+    {
+      "case_id": "case-005",
+      "lineage_id": "lineage-005",
+      "duplicate_cluster_id": "cluster-005",
+      "split": "dev",
+      "input_digest": "sha256:6298e6c922706e0c35f91363204596162714e5704d9ab670666d1315c7d6f604",
+      "labels_digest": "sha256:2c8e908ba8014645c1619ea243963259747a6f745b629764ab78a70707cc77e9"
+    },
+    {
+      "case_id": "case-006",
+      "lineage_id": "lineage-001",
+      "duplicate_cluster_id": "cluster-001",
+      "split": "dev",
+      "input_digest": "sha256:0c0b55522721e41686f057ecead9f1456c84cb72df58f6eb95a3746b18f574d0",
+      "labels_digest": "sha256:5313cba2eacf7a765b73019ccff31b2c6c537b79c0a07478e2d51aec6057eaad"
+    }
+  ]
+}

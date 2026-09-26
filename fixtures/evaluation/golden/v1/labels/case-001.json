@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "case-001",
+  "expected_status": "resolved",
+  "acceptable_causes": [
+    "missing_required_environment_variable"
+  ],
+  "required_evidence_ids": [
+    "ev-001",
+    "ev-002"
+  ],
+  "forbidden_actions": [
+    "execute_remediation",
+    "reuse_unverified_historical_action"
+  ],
+  "suggested_checks": [
+    "Compare required environment settings across task definitions 16 and 17.",
+    "Have an operator assess restoring the missing setting or reverting the rollout; verify task health afterward."
+  ]
+}
