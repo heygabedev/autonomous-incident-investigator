@@ -8,20 +8,24 @@ from pathlib import Path
 
 import pytest
 import uvicorn
+from incident_investigator.evaluation.golden import IncidentInput
 from incident_investigator.main import create_app
+from incident_investigator.security.authority import SecurityAuthority
 from incident_investigator.security.http import RuntimeSettings
 from incident_investigator.security.sessions import Sessions
 from playwright.sync_api import Page, expect, sync_playwright
 
 
 @pytest.fixture
-def server() -> Iterator[tuple[str, Sessions]]:
+def server(tmp_path: Path) -> Iterator[tuple[str, Sessions]]:
     sessions = Sessions()
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
         settings = RuntimeSettings(api_port=port)
-        application = create_app(settings, sessions, Path("apps/web/dist"))
+        application = create_app(
+            settings, sessions, Path("apps/web/dist"), SecurityAuthority(tmp_path / "runtime")
+        )
         runner = uvicorn.Server(uvicorn.Config(application, access_log=False, log_level="critical"))
         thread = threading.Thread(target=runner.run, kwargs={"sockets": [listener]}, daemon=True)
         thread.start()
@@ -123,3 +127,55 @@ def test_real_browser_csrf_and_csp(page: Page, server: tuple[str, Sessions]) -> 
     assert page.locator("body").get_attribute("data-compromised") is None
     # The failed cross-site attempt did not consume the pairing secret.
     assert sessions.redeem(secret)
+
+
+def test_browser_can_investigate_stream_export_and_recall(
+    page: Page, server: tuple[str, Sessions]
+) -> None:
+    origin, sessions = server
+    page.goto(origin)
+    source = IncidentInput.model_validate_json(
+        Path("fixtures/evaluation/golden/v1/inputs/case-001.json").read_bytes()
+    ).model_dump(mode="json")
+    result = page.evaluate(
+        """async ({secret, incident}) => {
+        const paired = await fetch('/api/v1/session', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({secret})
+        });
+        const {token} = await paired.json();
+        const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};
+        const submitted = await fetch('/api/v1/investigations', {
+            method: 'POST', headers,
+            body: JSON.stringify({idempotency_key: 'c'.repeat(32), incident})
+        });
+        const job = await submitted.json();
+        const path = `/api/v1/investigations/${job.id}`;
+        const progress = await (await fetch(path + '/events', {headers})).text();
+        const report = await (await fetch(path + '/report', {headers})).json();
+        const exported = await fetch(path + '/report/export', {headers});
+        const exportReport = await exported.json();
+        const recalled = await fetch(path + '/report/recall', {
+            method: 'POST', headers, body: JSON.stringify({reason: 'security_review'})
+        });
+        const denied = await fetch(path + '/report/export', {headers});
+        await fetch('/api/v1/session', {method: 'DELETE', headers});
+        const revoked = await fetch(path, {headers});
+        return {
+            accepted: submitted.status, completed: progress.includes('"status":"succeeded"'),
+            status: report.status, pinned: report.pin.candidate_digest === job.pin.candidate_digest,
+            sameExport: JSON.stringify(report) === JSON.stringify(exportReport),
+            attachment: exported.headers.get('Content-Disposition'),
+            recalled: recalled.status, denied: denied.status, revoked: revoked.status,
+            saved: [localStorage.length, sessionStorage.length],
+            leaked: progress.includes(token) || progress.includes(secret)
+        };
+    }""",
+        {"secret": sessions.issue_pairing(), "incident": source},
+    )
+    assert result["accepted"] == 202 and result["completed"]
+    assert result["status"] == "resolved" and result["pinned"] and result["sameExport"]
+    assert result["attachment"].startswith("attachment;")
+    assert (result["recalled"], result["denied"], result["revoked"]) == (200, 409, 401)
+    assert result["saved"] == [0, 0] and not result["leaked"]
+    assert page.context.cookies() == []
