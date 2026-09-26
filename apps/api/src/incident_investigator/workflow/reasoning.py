@@ -87,6 +87,8 @@ def hypothesize(state: RunState) -> tuple[Hypothesis, ...]:
             continue
         support = [item for item in observed if item.signal in signals]
         if support:
+            if cause == "missing_required_environment_variable":
+                support.extend(item for item in observed if item.signal == "startup_healthy")
             results.append(
                 Hypothesis(
                     cause=cause, evidence_ids=tuple(sorted(item.evidence.id for item in support))
@@ -101,10 +103,11 @@ def verify(state: RunState) -> tuple[Hypothesis, ...]:
     for hypothesis in state.hypotheses:
         support = [item for item in observed if item.evidence.id in hypothesis.evidence_ids]
         complete = set(REQUIRED[hypothesis.cause]).issubset(item.signal for item in support)
+        core = [item for item in support if item.signal in REQUIRED[hypothesis.cause]]
         independent = any(
             a.modality != b.modality and a.provenance_group != b.provenance_group
-            for a in support
-            for b in support
+            for a in core
+            for b in core
         )
         cohorts = {item.cohort for item in support if item.cohort is not None}
         changes = [item.occurred_at for item in support if item.modality == "change"]

@@ -17,6 +17,7 @@ from incident_investigator.security.policy import (
     SecurityPolicy,
 )
 from incident_investigator.workflow.contracts import (
+    CoverageGap,
     InvestigationReport,
     Modality,
     RunPin,
@@ -153,7 +154,11 @@ def build_graph(
                     checked = verify(state)
                     changes = {"hypotheses": [item.model_dump(mode="json") for item in checked]}
                     supported = sum(item.verdict == "supported" for item in checked)
-                    next_stage = "history" if supported == 1 else "request"
+                    pending = any(
+                        state.evidence_rounds < item.available_round <= state.round_limit
+                        for item in incident.observations
+                    )
+                    next_stage = "history" if supported == 1 and not pending else "request"
                 elif stage == "request":
                     # Captured data is finite. Do not retry an exhausted snapshot.
                     more = any(
@@ -247,8 +252,16 @@ def make_report(state: RunState) -> InvestigationReport:
         publication_bytes(
             claims, records, incident.account_id, incident.region, (incident.resource,)
         )
+    gaps = (
+        *incident.gaps,
+        *(
+            CoverageGap(source_id=item.source_id, modality=item.modality, reason="unavailable")
+            for item in incident.observations
+            if item.source_id not in state.visible_ids
+        ),
+    )
     status: Literal["resolved", "degraded", "unresolved"] = (
-        "unresolved" if len(claims) != 1 else ("degraded" if incident.gaps else "resolved")
+        "unresolved" if len(claims) != 1 else ("degraded" if gaps else "resolved")
     )
     return InvestigationReport(
         attempt_id=state.attempt_id,
@@ -256,7 +269,7 @@ def make_report(state: RunState) -> InvestigationReport:
         status=status,
         hypotheses=checked,
         recommendations=state.recommendations,
-        gaps=incident.gaps,
+        gaps=gaps,
         evidence_ids=tuple(sorted(item.id for item in records)),
     )
 
