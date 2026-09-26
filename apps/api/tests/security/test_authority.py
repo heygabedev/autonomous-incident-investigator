@@ -211,6 +211,26 @@ def test_never_change_permissions_on_an_unrelated_directory(tmp_path: Path) -> N
     assert (tmp_path / "unrelated.txt").read_text() == "keep this"
 
 
+def test_missing_sidecar_is_allowed_but_stat_permission_failure_is_not(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "security.sqlite3-shm"
+    original = Path.stat
+    failure: list[type[OSError]] = [FileNotFoundError]
+
+    def stat_once(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        if path == target:
+            raise failure[0]()
+        return original(path, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "stat", stat_once)
+    assert local_path(target) == target
+    failure[0] = PermissionError
+    with pytest.raises(PermissionError):
+        local_path(target)
+
+
 def test_cli_controls_and_corrupt_store_containment(tmp_path: Path) -> None:
     runner = CliRunner()
     directory = tmp_path / "runtime"
