@@ -1,5 +1,6 @@
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -52,7 +53,7 @@ def test_concurrent_delivery_creates_one_attempt(store: JobStore) -> None:
 def test_migration_backup_and_old_checkpoint_reader(store: JobStore) -> None:
     backups = list(store.authority.root.glob("before-jobs-v1-*.sqlite3"))
     assert len(backups) == 1
-    with sqlite3.connect(backups[0]) as backup:
+    with closing(sqlite3.connect(backups[0])) as backup:
         assert backup.execute("PRAGMA integrity_check").fetchone() == ("ok",)
         assert backup.execute("SELECT COUNT(*) FROM restrictions").fetchone() == (1,)
     runtime = OfflineRuntime(store.authority, store.clock)
