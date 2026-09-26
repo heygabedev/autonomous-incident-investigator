@@ -4,6 +4,9 @@ An interrupted evidence fan-out is replayed from the preceding boundary. These
 checkpoints do not serialize LangGraph tasks, Python objects or partial writes.
 """
 
+import sqlite3
+from collections.abc import Callable
+
 from incident_investigator.evaluation.canonical import (
     MAX_BYTES,
     canonical_bytes,
@@ -20,6 +23,8 @@ from incident_investigator.security.policy import (
 )
 from incident_investigator.workflow.contracts import RunState
 from incident_investigator.workflow.graph import decode, make_report, validate_state
+
+CheckpointGuard = Callable[[sqlite3.Connection, RunState], None]
 
 
 def state_digest(state: RunState) -> str:
@@ -64,7 +69,13 @@ class CheckpointStore:
         return state, policy
 
     def save(
-        self, state: RunState, policy: SecurityPolicy, *, expected: RunState | None, now: int
+        self,
+        state: RunState,
+        policy: SecurityPolicy,
+        *,
+        expected: RunState | None,
+        now: int,
+        guard: CheckpointGuard | None = None,
     ) -> None:
         state = decode(state.model_dump(mode="json"))
         validate_state(state, state.pin)
@@ -74,6 +85,8 @@ class CheckpointStore:
         payload = canonical_bytes(parse_json(state.model_dump_json()))
         with self.authority.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if guard is not None:
+                guard(connection, state)
             if expected is None:
                 if state.completed or state.next_stage != "scope" or state.report is not None:
                     raise ValueError("initial_checkpoint_required")
