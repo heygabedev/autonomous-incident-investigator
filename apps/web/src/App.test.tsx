@@ -8,5 +8,6 @@ test("renders the product name and foundation status", () => {
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
     "Autonomous Incident Investigator",
   );
-  expect(screen.getByRole("heading", { name: "Foundation ready" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Pairing code from the app terminal")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Foundation ready" })).not.toBeInTheDocument();
 });
