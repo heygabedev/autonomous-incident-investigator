@@ -50,6 +50,7 @@ class Observation(Contract):
     observed_at: Timestamp
     signal: Signal
     cohort: Identifier | None = None
+    available_round: Annotated[int, Field(ge=0, le=2)] = 0
     evidence: SanitizedEvidence
 
 
@@ -167,6 +168,7 @@ class RunState(Contract):
     next_stage: Stage = "scope"
     completed: Annotated[tuple[Stage, ...], Field(max_length=20)] = ()
     collected: Annotated[tuple[Modality, ...], Field(max_length=4)] = ()
+    visible_ids: Annotated[tuple[Identifier, ...], Field(max_length=100)] = ()
     timeline: Annotated[tuple[Identifier, ...], Field(max_length=100)] = ()
     hypotheses: Annotated[tuple[Hypothesis, ...], Field(max_length=4)] = ()
     evidence_rounds: Annotated[int, Field(ge=0, le=2)] = 0

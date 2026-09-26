@@ -9,6 +9,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "langgraph>=1.0,<2",
+  "langsmith>=0.14,<1",
   "orjson>=3.10,<4",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
