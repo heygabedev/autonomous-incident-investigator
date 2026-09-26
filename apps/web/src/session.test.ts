@@ -43,3 +43,32 @@ test("rejects incompatible builds and late pairing responses", async () => {
   await expect(pending).rejects.toThrow("expired");
   expect(hasSession()).toBe(false);
 });
+
+test("a late unauthorized response cannot revoke a newer session", async () => {
+  const mock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({ token: "a".repeat(43) }), { headers }));
+  vi.stubGlobal("fetch", mock); await pair("first");
+  let complete!: (response: Response) => void;
+  mock.mockReturnValueOnce(new Promise<Response>((resolve) => { complete = resolve; }));
+  const pending = sessionRequest("/api/v1/session");
+  mock.mockResolvedValueOnce(new Response(JSON.stringify({ token: "b".repeat(43) }), { headers }));
+  await pair("second");
+  complete(new Response(null, { status: 401, headers }));
+  await expect(pending).rejects.toThrow("changed");
+  expect(hasSession()).toBe(true);
+});
+
+test("version mismatches lock the console and server error payloads stay private", async () => {
+  const mock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({ token: "a".repeat(43) }), { headers }));
+  vi.stubGlobal("fetch", mock); await pair("secret");
+  mock.mockResolvedValueOnce(new Response("sensitive exception", { status: 503, headers }));
+  await expect(sessionRequest("/api/v1/session")).rejects.toThrow("unavailable");
+  mock.mockResolvedValueOnce(new Response("{}", { headers: { "X-Incident-API-Schema": "2.0.0" } }));
+  await expect(sessionRequest("/api/v1/session")).rejects.toThrow("versions");
+  expect(hasSession()).toBe(false);
+});
+
+test("bounds pairing response bodies before decoding JSON", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("x".repeat(4097), { headers })));
+  await expect(pair("secret")).rejects.toThrow("Oversized");
+  expect(hasSession()).toBe(false);
+});

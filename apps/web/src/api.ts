@@ -2,6 +2,7 @@ import { z } from "zod";
 import { evidenceSchema, eventSchema, jobId, jobSchema, reportSchema, terminal } from "./contracts";
 import type { Job, RecallReason } from "./contracts";
 import { ClientError, compatible, sessionRequest, sessionRevision } from "./session";
+import { readBounded } from "./response";
 
 const root = "/api/v1/investigations";
 const limit = 1024 * 1024;
@@ -9,26 +10,10 @@ const path = (id: string) => `${root}/${jobId.parse(id)}`;
 export const newKey = () => crypto.randomUUID().replaceAll("-", "");
 export const explain = (error: unknown) => error instanceof ClientError ? error.message :
   "Could not verify the response. Refresh or check the local service.";
-async function bounded(response: Response) {
-  if (!response.body) throw new Error("Missing body");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let text = "", size = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > limit) throw new Error("Oversized response");
-      text += decoder.decode(value, { stream: true });
-    }
-    return text + decoder.decode();
-  } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
-}
 async function request<T>(route: string, schema: z.ZodType<T>, signal?: AbortSignal, method = "GET", body?: string) {
   const revision = sessionRevision();
   const response = await sessionRequest(route, method, { signal, body });
-  const raw = await bounded(response);
+  const raw = await readBounded(response);
   if (revision !== sessionRevision() || signal?.aborted) throw new Error("Stale response");
   return schema.parse(JSON.parse(raw));
 }

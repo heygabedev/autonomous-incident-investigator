@@ -231,3 +231,76 @@ def test_console_incomplete_telemetry_abstains(page: Page, server: tuple[str, Se
     expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
     expect(page.get_by_text("No action is recommended with the current evidence.")).to_be_visible()
     expect(page.get_by_role("heading", name="Coverage gaps")).to_be_visible()
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_console_accessibility_and_responsive_layout(
+    page: Page, server: tuple[str, Sessions], tmp_path: Path, width: int
+) -> None:
+    origin, sessions = server
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto(origin)
+    page.keyboard.press("Tab")
+    expect(page.get_by_role("link", name="Skip to workspace")).to_be_focused()
+    page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
+    page.get_by_role("button", name="Unlock console").click()
+    expect(page.get_by_role("heading", name="Start with the evidence.")).to_be_visible()
+    # The scanner is local test code, never a production script or remote resource.
+    page.evaluate(Path("node_modules/axe-core/axe.min.js").read_text(encoding="utf-8"))
+    for state in ("launcher", "report"):
+        violations = page.evaluate("""async () => (await axe.run(document, {
+            runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}
+        })).violations.map(({id, nodes}) => ({id, targets: nodes.map(node => node.target)}))""")
+        assert violations == []
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        page.screenshot(path=str(tmp_path / f"{state}-{width}.png"), full_page=True)
+        if state == "launcher":
+            page.get_by_role("button", name="Start investigation").click()
+            expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(
+                timeout=20_000
+            )
+
+
+def test_revocation_clears_rendered_report(page: Page, server: tuple[str, Sessions]) -> None:
+    origin, sessions = server
+    page.goto(origin)
+    page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
+    with page.expect_response("**/api/v1/session") as exchanged:
+        page.get_by_role("button", name="Unlock console").click()
+    page.get_by_role("button", name="Start investigation").click()
+    expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
+    sessions.revoke(exchanged.value.json()["token"])
+    page.get_by_role("button", name="Refresh investigation").click()
+    expect(page.get_by_role("button", name="Unlock console")).to_be_visible()
+    expect(page.get_by_role("heading", name="Cause assessment")).not_to_be_visible()
+    expect(page.get_by_text("synthetic-checkout", exact=False)).not_to_be_visible()
+
+
+def test_export_rechecks_recall_instead_of_downloading_cached_report(
+    page: Page, server: tuple[str, Sessions]
+) -> None:
+    origin, sessions = server
+    page.goto(origin)
+    page.get_by_label("Pairing code from the app terminal").fill(sessions.issue_pairing())
+    with page.expect_response("**/api/v1/session") as exchanged:
+        page.get_by_role("button", name="Unlock console").click()
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/v1/investigations") and response.request.method == "POST"
+        )
+    ) as submitted:
+        page.get_by_role("button", name="Start investigation").click()
+    expect(page.get_by_role("heading", name="Cause assessment")).to_be_visible(timeout=20_000)
+    identifier = submitted.value.json()["id"]
+    response = page.request.post(
+        origin + f"/api/v1/investigations/{identifier}/report/recall",
+        headers={"Authorization": f"Bearer {exchanged.value.json()['token']}"},
+        data={"reason": "operator_request"},
+    )
+    assert response.status == 200
+    downloads: list[str] = []
+    page.on("download", lambda item: downloads.append(item.suggested_filename))
+    page.get_by_role("button", name="Export verified report").click()
+    expect(page.get_by_role("alert")).to_contain_text("no longer available")
+    expect(page.get_by_role("heading", name="Cause assessment")).not_to_be_visible()
+    assert downloads == []
