@@ -94,7 +94,7 @@ def test_recall_and_replay_are_linked_immutable_attempts(service: JobService) ->
     worker = Worker(service.store)
     worker.run_once()
     original = service.runtime.store.load(job.id)[0]
-    recalled = service.recall(job.id, "invalidated_evidence", "operator")
+    recalled = service.recall(job.id, "operator_request", "operator")
     assert recalled.report_status == "recalled"
     with pytest.raises(JobError, match="report_unavailable"):
         service.deliver(job.id, "operator")
@@ -104,7 +104,7 @@ def test_recall_and_replay_are_linked_immutable_attempts(service: JobService) ->
     worker.run_once()
     replaced = service.store.get(job.id)
     assert replaced.report_status == "superseded" and replaced.replacement_id == replay.id
-    assert replaced.recall_reason == "invalidated_evidence"
+    assert replaced.recall_reason == "operator_request"
     assert service.runtime.store.load(job.id)[0] == original
     assert json.loads(service.deliver(replay.id, "operator"))["status"] == "resolved"
     assert service.recall(job.id, "operator_request", "operator") == replaced

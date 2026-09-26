@@ -63,6 +63,7 @@ class Worker:
             raise JobError(409, "lease_lost")
         if self.store.authority.read().safe_mode:
             raise OperationDenied("contained")
+        self.store.check_lineage(connection, job)
         if (state.attempt_id, state.pin, state.input_digest) != (job.id, job.pin, job.input_digest):
             raise ValueError("job_checkpoint_mismatch")
         completed = state.next_stage == "done"

@@ -94,6 +94,27 @@ class JobStore:
             raise ValueError("job_integrity_failure")
         return state, policy
 
+    def check_lineage(self, connection: sqlite3.Connection, job: JobView) -> None:
+        restrictions = self.authority.read()
+        seen = {job.id}
+        child = job
+        while child.replay_of is not None:
+            if child.replay_of in seen or len(seen) >= 1000:
+                raise ValueError("invalid_job_lineage")
+            parent = self.read(connection, child.replay_of)
+            seen.add(parent.id)
+            if (
+                parent.recall_reason in ("security_review", "invalidated_evidence")
+                or parent.pin.candidate_id in restrictions.revoked_candidates
+            ):
+                raise JobError(409, "replay_source_restricted")
+            if (
+                parent.recall_reason == "defective_runtime"
+                and parent.pin.graph_digest == child.pin.graph_digest
+            ):
+                raise JobError(409, "replay_requires_changed_runtime")
+            child = parent
+
     def submit(
         self,
         state: RunState,
@@ -120,8 +141,11 @@ class JobStore:
                 if row[1] != fingerprint:
                     raise JobError(409, "idempotency_conflict")
                 return self.read(connection, row[0])
-            if self.authority.read().safe_mode:
+            restrictions = self.authority.read()
+            if restrictions.safe_mode:
                 raise JobError(409, "contained")
+            if state.pin.candidate_id in restrictions.revoked_candidates:
+                raise JobError(403, "candidate_revoked")
             # Explicit bounded storage/queue. Retention and archival are a later subsystem.
             count = connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
             pending = connection.execute(
@@ -134,6 +158,7 @@ class JobStore:
                 parent = self.read(connection, replay_of)
                 if parent.status not in ("succeeded", "failed", "cancelled"):
                     raise JobError(409, "replay_requires_terminal_job")
+                self.check_lineage(connection, job)
             self.audit(connection, actor, "job.submit", job)
             connection.execute(
                 "INSERT INTO jobs(id, idempotency_key, fingerprint, initial, policy, view) "

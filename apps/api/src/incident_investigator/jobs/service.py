@@ -66,11 +66,21 @@ class JobService:
         with self.store.authority.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             job = self.store.read(connection, identifier)
-            if job.report_status in ("recalled", "superseded"):
-                return job
-            if job.report_status != "available":
+            severity = {
+                "operator_request": 0,
+                "defective_runtime": 1,
+                "invalidated_evidence": 2,
+                "security_review": 3,
+            }
+            if job.report_status == "none":
                 raise JobError(409, "report_unavailable")
-            job = self.store.changed(job, report_status="recalled", recall_reason=reason)
+            if job.recall_reason is not None and severity[job.recall_reason] >= severity[reason]:
+                return job
+            job = self.store.changed(
+                job,
+                report_status="superseded" if job.report_status == "superseded" else "recalled",
+                recall_reason=reason,
+            )
             self.store.audit(connection, actor, "report.recall", job)
             self.store.write(connection, job)
         return job
@@ -81,6 +91,9 @@ class JobService:
         with self.store.authority.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             job = self.store.read(connection, identifier)
+            self.store.check_lineage(connection, job)
+            if evidence and job.recall_reason == "security_review":
+                raise JobError(409, "evidence_quarantined")
             if not evidence and (job.status != "succeeded" or job.report_status != "available"):
                 raise JobError(409, "report_unavailable")
             state, policy = (
