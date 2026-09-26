@@ -104,3 +104,7 @@ def validate_candidate_links(store: ArtifactStore, reference: ArtifactRef) -> No
     ):
         raise EligibilityError("calibration is incompatible with candidate retrieval or thresholds")
     RegisteredDatasets(store).validate(calibration.training_snapshot)
+    training = store.resolve(calibration.training_snapshot).payload
+    assert isinstance(training, DatasetSnapshot)
+    if not any(member.split == "calibration" for member in training.members):
+        raise EligibilityError("training snapshot has no calibration partition")

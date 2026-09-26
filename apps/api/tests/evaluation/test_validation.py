@@ -99,9 +99,10 @@ def test_label_policy_must_match_snapshot(store: SQLiteRegistry) -> None:
         RegisteredDatasets(store).validate(reference)
 
 
-@pytest.mark.parametrize("mutation", ["none", "index", "feature", "threshold"])
+@pytest.mark.parametrize("mutation", ["none", "index", "feature", "threshold", "training"])
 def test_calibration_compatibility(store: SQLiteRegistry, mutation: str) -> None:
-    training = dataset(store, [(payload("case_revision"), "calibration")])
+    split = "dev" if mutation == "training" else "calibration"
+    training = dataset(store, [(payload("case_revision"), split)])
     candidate_payload = payload()
     candidate = parse_artifact(json.dumps(candidate_payload))
     assert isinstance(candidate, CandidateBundle)
@@ -120,7 +121,7 @@ def test_calibration_compatibility(store: SQLiteRegistry, mutation: str) -> None
     if mutation == "none":
         validate_candidate_links(store, reference)
     else:
-        with pytest.raises(EligibilityError, match="incompatible"):
+        with pytest.raises(EligibilityError):
             validate_candidate_links(store, reference)
 
 

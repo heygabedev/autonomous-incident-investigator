@@ -37,6 +37,7 @@ dev = [
 
 [project.scripts]
 incident-api = "incident_investigator.main:run"
+incident-eval = "incident_investigator.evaluation.cli:app"
 
 [build-system]
 requires = ["hatchling>=1.27"]
