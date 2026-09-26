@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ecs from "../../../fixtures/evaluation/golden/v1/inputs/case-001.json";
 import lambda from "../../../fixtures/evaluation/golden/v1/inputs/case-002.json";
 import limited from "../../../fixtures/evaluation/golden/v1/inputs/case-005.json";
@@ -19,13 +19,30 @@ export function Workspace() {
   const [selected, setSelected] = useState<string>();
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const updateJob = useCallback((job: Job) => {
+    setJobs((current) => {
+      const previous = current.find((item) => item.id === job.id);
+      if (previous && previous.revision >= job.revision) return current;
+      return [job, ...current.filter((item) => item.id !== job.id)]
+        .sort((left, right) => right.created_at - left.created_at).slice(0, 50);
+    });
+  }, []);
   useEffect(() => {
     const abort = new AbortController();
     let loading = false;
     const load = async () => {
       if (loading) return;
       loading = true;
-      try { const result = await listJobs(abort.signal); if (!abort.signal.aborted) { setJobs(result); setError(""); } }
+      try {
+        const result = await listJobs(abort.signal);
+        if (!abort.signal.aborted) {
+          setJobs((current) => result.map((job) => {
+            const newer = current.find((item) => item.id === job.id && item.revision > job.revision);
+            return newer ?? job;
+          }));
+          setError("");
+        }
+      }
       catch (error) { if (!abort.signal.aborted) setError(explain(error)); }
       finally { loading = false; }
     };
@@ -50,7 +67,7 @@ export function Workspace() {
     </aside>
     <main id="main" className="main-content">
       <div className="mode-note">OFFLINE WORKSPACE <span>Read-only investigation · recommendations require operator review</span></div>
-      {selected ? <Investigation key={selected} id={selected} open={open} /> : <Launcher open={open} />}
+      {selected ? <Investigation key={selected} id={selected} open={open} updateJob={updateJob} /> : <Launcher open={open} />}
     </main>
   </div>;
 }

@@ -5,7 +5,7 @@ import type { Evidence, Job, RecallReason, Report } from "./contracts";
 
 const readable = (value: string) => value.replaceAll("_", " ");
 type Snapshot = { job: Job; evidence: Evidence[]; report?: Report };
-export function Investigation({ id, open }: { id: string; open: (job: Job) => void }) {
+export function Investigation({ id, open, updateJob }: { id: string; open: (job: Job) => void; updateJob: (job: Job) => void }) {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [error, setError] = useState("");
   const [connection, setConnection] = useState("Connecting");
@@ -29,6 +29,7 @@ export function Investigation({ id, open }: { id: string; open: (job: Job) => vo
         const report = job.report_status === "available" ? validateReport(job, evidence, await getReport(id, abort.signal)) : undefined;
         if (!abort.signal.aborted && !acting.current) {
           setSnapshot((current) => current && current.job.revision > job.revision ? current : { job, evidence, report });
+          updateJob(job);
           setError("");
         }
       } catch (error) { if (!abort.signal.aborted) { setSnapshot(undefined); setError(explain(error)); } }
@@ -36,6 +37,7 @@ export function Investigation({ id, open }: { id: string; open: (job: Job) => vo
     };
     void load();
     void watchJob(id, abort.signal, (job) => {
+      updateJob(job);
       setSnapshot((current) => !acting.current && current && job.revision >= current.job.revision ?
         { ...current, job, report: job.report_status === "available" ? current.report : undefined } : current);
       if (terminal(job)) void load();
@@ -44,7 +46,7 @@ export function Investigation({ id, open }: { id: string; open: (job: Job) => vo
     });
     const timer = setInterval(() => { void load(); }, 15_000);
     return () => { abort.abort(); clearInterval(timer); };
-  }, [id, refresh]);
+  }, [id, refresh, updateJob]);
 
   const perform = (operation: (signal: AbortSignal) => Promise<void>) => {
     const controller = new AbortController(); action.current = controller;

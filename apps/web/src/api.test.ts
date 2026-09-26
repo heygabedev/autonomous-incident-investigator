@@ -54,3 +54,22 @@ test("uses authenticated fetch for events and closes on terminal state", async (
   expect(connection).toHaveBeenLastCalledWith("Complete");
   expect(new Headers(mock.mock.calls[1]?.[1]?.headers).get("Authorization")).toMatch(/^Bearer /);
 });
+
+test("reconnects from the last event and aborts without delivering stale data", async () => {
+  vi.useFakeTimers();
+  try {
+    const mock = await connected();
+    const streamHeaders = { ...headers, "X-Incident-Event-Schema": "1.0.0", "Content-Type": "text/event-stream" };
+    const frame = (sequence: number, status: string) => `id: ${sequence}\nevent: progress\ndata: ${JSON.stringify({ schema_version: "1.0.0", sequence, job: { ...job, status } })}\n\n`;
+    mock.mockResolvedValueOnce(new Response(frame(5, "running"), { headers: streamHeaders }));
+    mock.mockResolvedValueOnce(new Response(frame(7, "succeeded"), { headers: streamHeaders }));
+    const update = vi.fn();
+    const pending = watchJob(id, new AbortController().signal, update, vi.fn());
+    await vi.advanceTimersByTimeAsync(1001); await pending;
+    expect(new Headers(mock.mock.calls[2]?.[1]?.headers).get("Last-Event-ID")).toBe("5");
+    expect(update).toHaveBeenCalledTimes(2);
+    const abort = new AbortController(); abort.abort();
+    await watchJob(id, abort.signal, update, vi.fn());
+    expect(update).toHaveBeenCalledTimes(2);
+  } finally { vi.useRealTimers(); }
+});

@@ -1,3 +1,5 @@
+import { readBounded } from "./response";
+
 const base = import.meta.env.DEV ? "http://127.0.0.1:8000" : "";
 let token: string | undefined;
 let revision = 0;
@@ -33,7 +35,7 @@ export async function pair(secret: string): Promise<void> {
   });
   if (!response.ok) throw new ClientError("Pairing failed. Request a new code in the app terminal.");
   compatible(response);
-  const result: unknown = await response.json();
+  const result: unknown = JSON.parse(await readBounded(response, 4096));
   if (!result || typeof result !== "object" || !("token" in result) ||
       typeof result.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(result.token) || attempt !== revision) {
     throw new ClientError("Invalid or expired pairing response.");
