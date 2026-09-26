@@ -1,0 +1,12 @@
+{
+  "id": "security-golden",
+  "version": "1.0.0",
+  "synthetic": true,
+  "split": "dev",
+  "promotion_eligible": false,
+  "case_count": 18,
+  "sha256": {
+    "inputs.json": "9dfb07e19161d1f2d554d765fbccf212a523279cc4211c6acfa55e0ba1db5830",
+    "expected.json": "263c43530636a934c9dc697b2d1c88a13cde29cd60e7254b9feb344d362c2747"
+  }
+}

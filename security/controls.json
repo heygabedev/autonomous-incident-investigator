@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0.0",
+  "scope": "single-operator local-only synthetic fixture runtime",
+  "live_enabled": false,
+  "private_evaluation_enabled": false,
+  "assurance": "Executable development controls, not certification or a guarantee against compromise.",
+  "limitations": [
+    "The administrator and owning OS account can alter local files, application code and audit records.",
+    "Redaction covers recognized patterns; unknown free text is not certified free of sensitive data.",
+    "Structured evidence extraction is deliberately narrow; unsupported formats become coverage gaps.",
+    "Browser pairing cannot protect against a compromised browser, extension or OS session.",
+    "No live AWS role, IAM policy or Identity Center configuration has been changed or certified.",
+    "Current revocations and restrictions are independent of candidate releases; release rollback itself is not implemented."
+  ],
+  "controls": [
+    {"id":"local-http","status":"implemented","tests":["apps/api/tests/security/test_http.py"],"detail":"Exact loopback Host and origins, no forwarded headers, strict JSON and streaming 1 MiB body limit, generic errors, headers, 64 runtime connections."},
+    {"id":"pairing-sessions","status":"implemented","tests":["apps/api/tests/security/test_sessions.py","tests/browser/test_security.py"],"detail":"Five-minute one-use terminal code; digest-only bearer registry; 30-minute idle and eight-hour absolute expiry; logout and restart revocation."},
+    {"id":"session-rate-limits","status":"implemented","tests":["apps/api/tests/security/test_sessions.py","apps/api/tests/security/test_http.py"],"detail":"Five pairing attempts and 120 requests per session per minute, 32 sessions and two stream reservations per session."},
+    {"id":"inert-rendering","status":"implemented","tests":["apps/web/src/UntrustedText.test.tsx","tests/browser/test_security.py"],"detail":"Text-only component and production CSP. Future report views must use this boundary; no report viewer exists yet."},
+    {"id":"operation-broker","status":"implemented","tests":["apps/api/tests/security/test_policy.py"],"detail":"Typed requests; intersection of pinned policy and current restrictions; audit intent and last-moment recheck; no live handlers enabled."},
+    {"id":"identity-contract","status":"implemented","tests":["apps/api/tests/security/test_identity.py"],"detail":"Pure checks for explicit SSO profile, account, Region and dedicated role; metadata assertions are not proof of MFA."},
+    {"id":"sanitized-sinks","status":"implemented","tests":["apps/api/tests/security/test_evidence.py","apps/api/tests/security/test_authority.py"],"detail":"Distinct raw/sanitized types, bounded allowlisted extraction, scope and content ID validation before storage and export; reusable model/checkpoint/stream gate."},
+    {"id":"citation-integrity","status":"implemented","tests":["apps/api/tests/security/test_evidence.py","apps/api/tests/security/test_golden_security.py"],"detail":"Reject unknown evidence IDs. This checks reference integrity, not semantic support for a claim."},
+    {"id":"historical-admission","status":"blocked","tests":["apps/api/tests/security/test_golden_security.py"],"detail":"All historical action publication is denied until canonical verification, revocation, calibration and precision gates exist."},
+    {"id":"private-storage","status":"implemented","tests":["apps/api/tests/security/test_authority.py"],"detail":"Windows current-SID ACL; POSIX 0700/0600; no linked paths or UNC storage; parameterized SQLite; bounded opaque content-addressed artifacts."},
+    {"id":"audit-and-containment","status":"implemented","tests":["apps/api/tests/security/test_authority.py"],"detail":"Append-only application interface; intent precedes dispatch; audit failure blocks sensitive work; independent persistent restrictions and emergency latch."},
+    {"id":"security-golden","status":"implemented","tests":["apps/api/tests/security/test_golden_security.py"],"detail":"Versioned synthetic inputs and expected results, dev-only and ineligible for sealed promotion evidence."},
+    {"id":"live-identity-and-adapters","status":"deferred","tests":[],"detail":"Requires independently verified phishing-resistant MFA configuration, actual SSO/STS role assumption without fallback, IAM and adapter negative contracts. Live startup remains rejected."},
+    {"id":"graph-model-stream-integration","status":"deferred","tests":[],"detail":"No investigation graph, live model call, checkpoint or SSE endpoint exists. Future sinks must use shared gates, per-event session rechecks and cancellation; current stream slots are a primitive only."},
+    {"id":"execution-leases-and-budgets","status":"deferred","tests":[],"detail":"Requires transactional budget reservations and adapter-specific dispatch/cancellation fencing before live enablement. A pre-dispatch policy check cannot revoke an already issued external request."},
+    {"id":"private-evaluation-isolation","status":"deferred","tests":[],"detail":"Candidate/scorer/exporter process and IAM isolation are not implemented. No private evaluation or sealed controls are exposed through the API."},
+    {"id":"release-recovery-governance","status":"deferred","tests":[],"detail":"Release management must reuse this restriction authority and replay revocations/deletions before restoring data. Recovery targets and signed audit replication require future drills."}
+  ]
+}

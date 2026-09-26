@@ -1,0 +1,20 @@
+{
+  "allowed-offline":{"outcome":"allowed"},
+  "workload-mutation":{"outcome":"operation_unregistered"},
+  "live-model-disabled":{"outcome":"live_adapter_disabled"},
+  "cross-account":{"outcome":"account_denied"},
+  "wrong-region":{"outcome":"region_denied"},
+  "scope-escape":{"outcome":"resource_denied"},
+  "arbitrary-query":{"outcome":"template_denied"},
+  "cost-limit":{"outcome":"budget_exceeded"},
+  "endpoint-injection":{"outcome":"schema_denied"},
+  "credential-field":{"outcome":"sanitized","value":"[REDACTED]"},
+  "personal-identifier":{"outcome":"sanitized","value":"[REDACTED]"},
+  "missing-supported-evidence":{"outcome":"omitted","abstain":true},
+  "indirect-injection":{"outcome":"omitted","abstain":true},
+  "observed-failure":{"outcome":"sanitized","value":"failed"},
+  "poisoned-history":{"outcome":"historical_publication_disabled"},
+  "unverified-calibration":{"outcome":"historical_publication_disabled"},
+  "fabricated-evidence":{"outcome":"fabricated_citation"},
+  "cited-report":{"outcome":"allowed"}
+}

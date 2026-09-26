@@ -109,3 +109,49 @@ def test_future_handler_errors_are_generic() -> None:
     )
     assert response.status_code == 500
     assert "private-incident-secret" not in response.text
+
+
+@pytest.mark.parametrize("body", [b"\xff", b'{"secret":NaN}', b"\xff\xfe{\x00}", b"[]" * 100])
+def test_malformed_encodings_and_numbers_are_rejected(body: bytes) -> None:
+    assert (
+        client()
+        .post("/api/v1/session", content=body, headers={"Content-Type": "application/json"})
+        .status_code
+        == 400
+    )
+
+
+def test_duplicate_headers_and_smuggling_denied() -> None:
+    for headers in (
+        [("Host", "127.0.0.1:8000"), ("Host", "evil.invalid")],
+        [("Origin", "http://127.0.0.1:8000"), ("Origin", "null")],
+        [("Content-Length", "0"), ("Transfer-Encoding", "chunked")],
+    ):
+        assert client().post("/api/v1/session", headers=headers).status_code == 400
+
+
+def test_retry_after_and_private_eval_not_exposed() -> None:
+    browser = client()
+    for _ in range(5):
+        assert browser.post("/api/v1/session", json={"secret": "x" * 43}).status_code == 401
+    response = browser.post("/api/v1/session", json={"secret": "x" * 43})
+    assert response.status_code == 429 and int(response.headers["retry-after"]) > 0
+    sessions = Sessions()
+    token = sessions.redeem(sessions.issue_pairing())
+    browser = client(sessions)
+    for path in ("/api/v1/evaluation", "/api/v1/gold-labels", "/openapi.json", "/docs", "/redoc"):
+        assert browser.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 404
+
+
+def test_health_survives_audit_failure() -> None:
+    def fail(*args: object) -> None:
+        raise OSError("disk full and private secret")
+
+    sessions = Sessions()
+    secret = sessions.issue_pairing()
+    sessions.audit = fail
+    browser = client(sessions)
+    response = browser.post("/api/v1/session", json={"secret": secret})
+    assert response.status_code == 503
+    assert "private secret" not in response.text
+    assert browser.get("/api/v1/health/live").status_code == 200

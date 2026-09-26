@@ -24,6 +24,7 @@ from incident_investigator.evaluation.canonical import (
 from incident_investigator.evaluation.models import Contract, Identifier
 from incident_investigator.security.evidence import SanitizedEvidence, evidence_bytes
 from incident_investigator.security.policy import (
+    OPERATIONS,
     ActionRequest,
     AuthorizationDecision,
     Broker,
@@ -190,7 +191,9 @@ class SecurityAuthority:
         self.record(
             AuditEvent(
                 actor_id=context.actor_id,
-                action=request.operation,
+                action=request.operation
+                if request.operation in OPERATIONS
+                else "operation.unregistered",
                 decision="allow" if decision.allowed else "deny",
                 reason=decision.reason,
                 policy_revision=decision.policy_revision,

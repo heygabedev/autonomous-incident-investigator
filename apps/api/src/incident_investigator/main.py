@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -80,6 +82,17 @@ def create_app(
 
 
 def run() -> None:
+    try:
+        _run()
+    except (OSError, ValueError, sqlite3.Error, subprocess.SubprocessError):
+        print(
+            "Startup refused: invalid configuration or unavailable private storage.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from None
+
+
+def _run() -> None:
     settings = RuntimeSettings()
     authority = SecurityAuthority(settings.data_dir)
 

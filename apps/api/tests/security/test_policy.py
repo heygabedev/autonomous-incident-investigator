@@ -138,3 +138,18 @@ def test_arbitrary_parameters_and_construction_bypass() -> None:
         Broker(lambda: policy(), lambda *args: None, lambda: 0).dispatch(
             CONTEXT, forged, policy(), lambda _: pytest.fail()
         )
+
+
+def test_policy_store_failure_never_falls_back() -> None:
+    def fail() -> SecurityPolicy:
+        raise OSError("private database path")
+
+    with pytest.raises(OperationDenied, match="policy_unavailable"):
+        Broker(fail, lambda *args: None, lambda: 0).dispatch(
+            CONTEXT, request(), policy(), lambda _: pytest.fail()
+        )
+    clock = iter([0, 1000])
+    with pytest.raises(OperationDenied, match="policy_changed"):
+        Broker(lambda: policy(), lambda *args: None, lambda: next(clock)).dispatch(
+            CONTEXT, request(), policy(), lambda _: pytest.fail()
+        )

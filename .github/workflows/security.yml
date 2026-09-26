@@ -11,6 +11,71 @@ permissions:
   contents: read
 
 jobs:
+  local-security:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+      LANGSMITH_TRACING: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.5.9"
+      - name: Install dependencies
+        run: uv sync --all-packages --all-extras --locked
+      - name: Check platform-specific types
+        run: uv run --frozen --no-sync mypy apps/api/src
+      - name: Test Linux security contracts with sockets disabled
+        if: runner.os == 'Linux'
+        run: uv run --frozen --no-sync pytest apps/api/tests/security --disable-socket --allow-unix-socket
+      - name: Test Windows security contracts with only loopback allowed
+        if: runner.os == 'Windows'
+        # The Windows event loop uses a loopback socket pair internally.
+        run: uv run --frozen --no-sync pytest apps/api/tests/security --disable-socket --allow-hosts=127.0.0.1
+
+  browser-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.5.9"
+      - name: Install dependencies and Chromium
+        run: |
+          uv sync --all-packages --all-extras --locked
+          npm ci
+          uv run --frozen --no-sync playwright install --with-deps chromium
+      - name: Build packaged UI
+        run: npm run build
+      - name: Exercise browser boundaries without external network access
+        run: |
+          sudo unshare --net -- sh -c 'ip link set lo up && exec "$@"' sh \
+            setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --no-new-privs \
+            "$GITHUB_WORKSPACE/.venv/bin/python" -m pytest tests/browser
+
   codeql:
     runs-on: ubuntu-latest
     timeout-minutes: 20

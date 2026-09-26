@@ -189,7 +189,7 @@ def test_reject_links_traversal_and_network_paths(tmp_path: Path) -> None:
 
 def test_private_storage_permissions(tmp_path: Path) -> None:
     root = protect_directory(tmp_path / "private")
-    path = private_file(root / "file")
+    path = private_file(root / "security.sqlite3")
     if sys.platform != "win32":
         assert root.stat().st_mode & 0o777 == 0o700
         assert path.stat().st_mode & 0o777 == 0o600
@@ -199,6 +199,16 @@ def test_private_storage_permissions(tmp_path: Path) -> None:
     else:
         # protect_directory verifies the native DACL, not chmod.
         assert protect_directory(root) == root
+
+
+def test_never_change_permissions_on_an_unrelated_directory(tmp_path: Path) -> None:
+    (tmp_path / "unrelated.txt").write_text("keep this", encoding="utf-8")
+    before = tmp_path.stat().st_mode
+    for path in (tmp_path, Path.home(), Path.cwd(), Path(tmp_path.anchor)):
+        with pytest.raises(ValueError, match="dedicated_data_directory_required"):
+            protect_directory(path)
+    assert tmp_path.stat().st_mode == before
+    assert (tmp_path / "unrelated.txt").read_text() == "keep this"
 
 
 def test_cli_controls_and_corrupt_store_containment(tmp_path: Path) -> None:
@@ -214,3 +224,35 @@ def test_cli_controls_and_corrupt_store_containment(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert (directory / "safe-mode").exists()
     assert "audit persistence failed" in result.output
+
+
+def test_unregistered_operation_payload_is_not_audited(authority: SecurityAuthority) -> None:
+    secret = "AKIA" + "Z" * 16
+    with pytest.raises(OperationDenied, match="operation_unregistered"):
+        authority.broker(policy(), lambda: 0).dispatch(
+            CONTEXT, request(operation=secret), policy(), lambda _: pytest.fail()
+        )
+    with authority.connect() as connection:
+        rows = connection.execute("SELECT payload FROM audit").fetchall()
+    assert secret not in repr(rows)
+    assert "operation.unregistered" in repr(rows)
+
+
+def test_interrupted_artifact_write_leaves_no_partial_record(
+    authority: SecurityAuthority, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*args: object) -> None:
+        raise sqlite3.OperationalError("disk full")
+
+    monkeypatch.setattr(authority, "_append", fail)
+    record = sanitize(
+        RawEvidence("000000000000", "eu-central-1", "fixture-1", {"status": "failed"}),
+        "000000000000",
+        "eu-central-1",
+        ("fixture-1",),
+    ).evidence
+    assert record is not None
+    with pytest.raises(sqlite3.OperationalError):
+        authority.put_evidence((record,), "000000000000", "eu-central-1", ("fixture-1",), "local")
+    with authority.connect() as connection:
+        assert connection.execute("SELECT count(*) FROM evidence").fetchone()[0] == 0

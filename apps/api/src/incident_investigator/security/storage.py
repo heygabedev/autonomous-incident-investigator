@@ -25,6 +25,17 @@ def local_path(path: Path) -> Path:
 
 def protect_directory(path: Path) -> Path:
     root = local_path(path)
+    if root in (Path(root.anchor), Path.home(), Path.cwd()):
+        raise ValueError("dedicated_data_directory_required")
+    managed = {
+        "security.sqlite3",
+        "security.sqlite3-wal",
+        "security.sqlite3-shm",
+        "security.sqlite3-journal",
+        "safe-mode",
+    }
+    if root.exists() and any(child.name not in managed for child in root.iterdir()):
+        raise ValueError("dedicated_data_directory_required")
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if sys.platform == "win32":
         # Fixed program, not a command assembled from a caller-controlled path.

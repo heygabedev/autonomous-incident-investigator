@@ -1,4 +1,5 @@
 import sqlite3
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,7 +24,7 @@ DEFAULT_DIRECTORY = Path(".data/runtime")
 def errors() -> Iterator[None]:
     try:
         yield
-    except (OSError, sqlite3.Error, ValueError):
+    except (OSError, sqlite3.Error, ValueError, subprocess.SubprocessError):
         typer.echo(
             "Control unavailable; inspect local storage. No sensitive details logged.", err=True
         )

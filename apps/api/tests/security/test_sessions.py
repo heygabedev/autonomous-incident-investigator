@@ -86,3 +86,57 @@ def test_pairing_brute_force_is_bounded() -> None:
     with pytest.raises(AccessError) as error:
         sessions.redeem("wrong")
     assert error.value.status == 429
+
+
+def test_concurrent_request_limit_and_session_cap() -> None:
+    now = [0.0]
+    sessions = Sessions(lambda: now[0])
+    token = sessions.redeem(sessions.issue_pairing())
+
+    def attempt(_: int) -> bool:
+        try:
+            sessions.authenticate(token)
+            return True
+        except AccessError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        assert sum(pool.map(attempt, range(200))) == 120
+    for index in range(1, 32):
+        now[0] = (index // 5) * 61
+        sessions.redeem(sessions.issue_pairing())
+    with pytest.raises(AccessError, match="session_limit"):
+        sessions.redeem(sessions.issue_pairing())
+
+
+def test_audit_failure_prevents_minting_but_logout_still_revokes() -> None:
+    unavailable = [False]
+    events: list[tuple[str, str]] = []
+
+    def audit(action: str, actor: str) -> None:
+        if unavailable[0]:
+            raise OSError("sensitive error")
+        events.append((action, actor))
+
+    sessions = Sessions(audit=audit)
+    secret = sessions.issue_pairing()
+    unavailable[0] = True
+    with pytest.raises(AccessError, match="audit_unavailable"):
+        sessions.redeem(secret)
+    unavailable[0] = False
+    token = sessions.redeem(secret)
+    assert secret not in repr(events) and token not in repr(events)
+    unavailable[0] = True
+    with pytest.raises(AccessError, match="audit_unavailable"):
+        sessions.revoke(token)
+    with pytest.raises(AccessError, match="unauthorized"):
+        sessions.authenticate(token)
+
+
+def test_stream_slots_released_on_interruption() -> None:
+    sessions = Sessions()
+    token = sessions.redeem(sessions.issue_pairing())
+    with pytest.raises(RuntimeError), sessions.stream(token):
+        raise RuntimeError("cancelled")
+    with sessions.stream(token), sessions.stream(token):
+        assert sessions.authenticate(token, touch=False)

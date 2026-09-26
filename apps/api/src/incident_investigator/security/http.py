@@ -45,9 +45,10 @@ class SecurityBoundary:
             return
         origin: str | None = None
         started = False
+        completed = False
 
         async def secured_send(message: Message) -> None:
-            nonlocal started
+            nonlocal started, completed
             if message["type"] == "http.response.start":
                 started = True
                 headers = list(message.get("headers", []))
@@ -76,7 +77,13 @@ class SecurityBoundary:
                         ]
                     )
                 message["headers"] = headers
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                completed = True
             await send(message)
+
+        async def terminate_stream() -> None:
+            if not completed:
+                await secured_send({"type": "http.response.body", "body": b"", "more_body": False})
 
         try:
             raw_headers = scope.get("headers", [])
@@ -92,9 +99,12 @@ class SecurityBoundary:
                     b"content-type",
                     b"content-encoding",
                     b"sec-fetch-site",
+                    b"transfer-encoding",
                 ):
                     raise AccessError(400, "ambiguous_headers")
                 headers[key] = value
+            if b"content-length" in headers and b"transfer-encoding" in headers:
+                raise AccessError(400, "ambiguous_body_length")
             if headers.get(b"host") != f"127.0.0.1:{self.settings.api_port}".encode():
                 raise AccessError(400, "invalid_host")
             origin = headers.get(b"origin", b"").decode("ascii") or None
@@ -134,9 +144,10 @@ class SecurityBoundary:
                     part = await receive()
                     if part["type"] == "http.disconnect":
                         return
-                    body.extend(part.get("body", b""))
-                    if len(body) > MAX_BYTES:
+                    chunk = part.get("body", b"")
+                    if len(body) + len(chunk) > MAX_BYTES:
                         raise AccessError(413, "body_too_large")
+                    body.extend(chunk)
                     if not part.get("more_body", False):
                         break
             if body:
@@ -155,6 +166,7 @@ class SecurityBoundary:
             await self.app(scope, replay, secured_send)
         except AccessError as exc:
             if started:
+                await terminate_stream()
                 return
             extra = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
             await JSONResponse({"error": exc.code}, status_code=exc.status, headers=extra)(
@@ -162,18 +174,22 @@ class SecurityBoundary:
             )
         except (ValueError, UnicodeError):
             if started:
+                await terminate_stream()
                 return
             await JSONResponse({"error": "invalid_request"}, status_code=400)(
                 scope, receive, secured_send
             )
         except TimeoutError:
             if started:
+                await terminate_stream()
                 return
             await JSONResponse({"error": "request_timeout"}, status_code=408)(
                 scope, receive, secured_send
             )
         except Exception:
-            if not started:
+            if started:
+                await terminate_stream()
+            else:
                 await JSONResponse({"error": "internal_error"}, status_code=500)(
                     scope, receive, secured_send
                 )
