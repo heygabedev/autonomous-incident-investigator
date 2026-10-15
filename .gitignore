@@ -36,6 +36,11 @@ apps/web/test-results/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfplan.json
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+infra/**/plan.json
 crash.log
 override.tf
 override.tf.json

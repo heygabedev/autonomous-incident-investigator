@@ -1,0 +1,68 @@
+name: Infrastructure
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-contracts:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      CHECKPOINT_DISABLE: "1"
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install checksum-pinned Terraform on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/terraform.zip" \
+            https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_amd64.zip
+          printf '%s  %s\n' '38034b38d03096399a7a1264a14561a8029b2b496fd1f169452656e53968f1b7' \
+            "$RUNNER_TEMP/terraform.zip" | sha256sum --check -
+          mkdir "$RUNNER_TEMP/terraform"
+          unzip -q "$RUNNER_TEMP/terraform.zip" -d "$RUNNER_TEMP/terraform"
+          echo "$RUNNER_TEMP/terraform" >> "$GITHUB_PATH"
+      - name: Install checksum-pinned Terraform on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'terraform.zip'
+          Invoke-WebRequest 'https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_windows_amd64.zip' -OutFile $archive
+          $expected = '6ea2c186e0e76a113af30fbcdcf7a4b4c70756317994a04929e5c90b9e94b1df'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Terraform checksum mismatch'
+          }
+          $destination = Join-Path $env:RUNNER_TEMP 'terraform'
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          $destination | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Initialize locked provider without a state backend
+        run: terraform -chdir=infra/aws init -backend=false -input=false -lockfile=readonly
+      - name: Check formatting
+        run: terraform -chdir=infra/aws fmt -check -recursive
+      - name: Validate configuration
+        run: terraform -chdir=infra/aws validate -no-color
+      - name: Run mock-provider tests in a Linux network namespace
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo unshare --net -- sh -c 'ip link set lo up && exec "$@"' sh \
+            setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --no-new-privs \
+            "$(command -v terraform)" -chdir=infra/aws test -no-color
+      - name: Run mock-provider tests on Windows without AWS credentials
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Windows runner has no AWS/OIDC credentials; unlike Linux this is not network isolation.
+        run: terraform -chdir=infra/aws test -no-color

@@ -13,6 +13,7 @@
     "Current revocations and restrictions are independent of candidate releases; release rollback itself is not implemented."
   ],
   "controls": [
+    {"id":"aws-infrastructure-contracts","status":"implemented","tests":["infra/aws/tests/storage.tftest.hcl","apps/api/tests/infrastructure/test_plans.py","apps/api/tests/infrastructure/test_inventory.py"],"detail":"Undeployed Terraform storage, queue, read-only collector and application IAM contracts; disabled intake/trust defaults; recovery plan checker rejects destruction and unreviewed updates. Mock tests are not deployed IAM proof or restore drills. Activation, private evaluation, state backend and recovery gaps are tracked in security/aws-infrastructure.json."},
     {"id":"local-http","status":"implemented","tests":["apps/api/tests/security/test_http.py"],"detail":"Exact loopback Host and origins, no forwarded headers, strict JSON and streaming 1 MiB body limit, generic errors, headers, 64 runtime connections."},
     {"id":"pairing-sessions","status":"implemented","tests":["apps/api/tests/security/test_sessions.py","tests/browser/test_security.py"],"detail":"Five-minute one-use terminal code; digest-only bearer registry; 30-minute idle and eight-hour absolute expiry; logout and restart revocation."},
     {"id":"session-rate-limits","status":"implemented","tests":["apps/api/tests/security/test_sessions.py","apps/api/tests/security/test_http.py"],"detail":"Five pairing attempts and 120 requests per session per minute, 32 sessions and two stream reservations per session."},

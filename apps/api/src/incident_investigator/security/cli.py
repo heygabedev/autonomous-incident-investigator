@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 import typer
 
 from incident_investigator.collectors.doctor import DoctorResult, inspect_config
+from incident_investigator.evaluation.canonical import MAX_BYTES
+from incident_investigator.infrastructure.plans import PlanCheck, check_plan
 from incident_investigator.security.authority import SecurityAuthority
 from incident_investigator.security.identity import IdentityRequirement
 from incident_investigator.security.policy import Feature
@@ -21,6 +23,22 @@ app.add_typer(safe, name="safe-mode")
 app.add_typer(features, name="feature")
 Directory = Annotated[Path, typer.Option("--data-dir")]
 DEFAULT_DIRECTORY = Path(".data/runtime")
+
+
+@app.command("infrastructure-check")
+def infrastructure_check(plan: Annotated[Path, typer.Option("--plan")]) -> None:
+    """Inspect Terraform show JSON locally. Never plan, apply or authorize deployment."""
+    try:
+        path = local_path(plan)
+        if not path.is_file():
+            raise ValueError("regular_plan_file_required")
+        with path.open("rb") as source:
+            result = check_plan(source.read(MAX_BYTES + 1))
+    except (OSError, ValueError):
+        result = PlanCheck(status="blocked", reasons=("plan_unavailable",))
+    typer.echo(result.model_dump_json())
+    if result.status != "passed":
+        raise typer.Exit(3 if result.status == "review_required" else 2)
 
 
 @app.command("doctor")
