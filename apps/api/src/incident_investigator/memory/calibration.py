@@ -12,7 +12,7 @@ from pydantic import Field, model_validator
 
 from incident_investigator.evaluation.models import Contract, Digest, Identifier, Probability
 from incident_investigator.memory.contracts import MemoryCase, Query, digest
-from incident_investigator.memory.retrieval import hypotheses
+from incident_investigator.memory.retrieval import current_observations, hypotheses
 
 
 class AdmissionPin(Contract):
@@ -35,7 +35,7 @@ class Features(Contract):
 
 
 def features(query: Query, case: MemoryCase) -> Features:
-    current = {item.signal for item in query.incident.observations}
+    current = {item.signal for item in current_observations(query)}
     previous = {item.signal for item in case.incident.observations}
     supported = [item for item in hypotheses(query) if item.verdict == "supported"]
     return Features(
@@ -166,6 +166,10 @@ def predict(calibration: Calibration, values: Features) -> Probabilities:
     calibration = Calibration.model_validate_json(calibration.model_dump_json())
     values = Features.model_validate_json(values.model_dump_json())
     row = next((row for row in calibration.bins if row.key == values.bin_key()), None)
+    return _estimate(row)
+
+
+def _estimate(row: Bin | None) -> Probabilities:
     if row is None:
         return Probabilities(same_cause_ppm=0, applicability_ppm=0, status="unseen_bin")
     return Probabilities(
@@ -197,10 +201,13 @@ def precision_check(calibration: Calibration, pairs: tuple[LabeledPair, ...]) ->
     ).intersection(item.cluster_id for item in pairs):
         raise ValueError("calibration_holdout_leakage")
     positives = successes = 0
+    bins = {row.key: row for row in calibration.bins}
     cause_scores: list[tuple[int, bool]] = []
     action_scores: list[tuple[int, bool]] = []
     for pair in pairs:
-        prediction = predict(calibration, pair.features)
+        # The calibration and pairs were validated once above; avoid quadratic
+        # serialization of the training manifest for each held-out prediction.
+        prediction = _estimate(bins.get(pair.features.bin_key()))
         cause_scores.append((prediction.same_cause_ppm, pair.same_cause))
         action_scores.append((prediction.applicability_ppm, pair.action_applicable))
         if (

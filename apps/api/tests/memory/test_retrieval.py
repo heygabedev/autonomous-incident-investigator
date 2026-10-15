@@ -190,3 +190,24 @@ def test_related_historical_variants_are_deduplicated() -> None:
         query().incident.investigation_cutoff,
     )
     assert len(matches) == 1 and matches[0].case_id == "a"
+
+
+def test_uncollected_evidence_cannot_anchor_current_hypotheses_or_embeddings() -> None:
+    from incident_investigator.memory.calibration import features
+    from incident_investigator.memory.retrieval import query_terms
+
+    current = query()
+    incident = current.incident.model_copy(
+        update={
+            "observations": tuple(
+                item.model_copy(update={"available_round": 2}) if item.modality == "log" else item
+                for item in current.incident.observations
+            )
+        }
+    )
+    current = current.model_copy(update={"incident": incident})
+    assert not features(current, case()).cause_supported
+    assert not any(term.startswith("log.") for term in query_terms(current)[0])
+    collected = current.model_copy(update={"collected_round": 2})
+    assert features(collected, case()).cause_supported
+    assert any(term.startswith("log.") for term in query_terms(collected)[0])

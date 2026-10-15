@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0.0",
+  "scope": "offline_synthetic_contracts_and_gate_simulation",
+  "live_enabled": false,
+  "historical_publication_enabled": false,
+  "private_evaluation_enabled": false,
+  "runtime_changes": "Existing graph, API and UI retain fixture-only reasoning and disabled historical publication.",
+  "provider_contracts": [
+    {
+      "operation": "bedrock.converse",
+      "iam_action": "bedrock:InvokeModel",
+      "result": "unverified_schema_validated_proposals_or_abstention",
+      "automatic_retries": 0,
+      "repair_calls": 0,
+      "source": "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html"
+    },
+    {
+      "operation": "bedrock.embed",
+      "iam_action": "bedrock:InvokeModel",
+      "model_id": "amazon.titan-embed-text-v2:0",
+      "dimensions": [256, 512, 1024],
+      "normalization": "l2",
+      "source": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-titan-embed-text.html"
+    }
+  ],
+  "synthetic_memory": {
+    "canonical_store": "process_local_fixture_store",
+    "derived_index": "immutable_content_pinned_generation",
+    "case_limit": 1000,
+    "revision_limit": 10000,
+    "retrieval_limit": 20,
+    "action_limit": 3,
+    "documents": ["observed_evidence", "verified_cause"],
+    "remediation_prose_in_similarity": false,
+    "calibration": "histogram_laplace_development_baseline",
+    "precision_test": "one_sided_95_percent_Wilson_at_least_100_independent_gate_positive_rows",
+    "precision_lower_bound_ppm": 950000,
+    "maximum_ece_ppm": 50000,
+    "maximum_brier_ppm": 100000,
+    "authority": "Existing central broker audits previews and checks current containment. Fixture lifecycle state is not a second production governance store."
+  },
+  "deferred": [
+    "Identity Center and assumed-role live authorization gates from security/aws-collectors.json",
+    "Per-model access, tool-schema support and Region capability checks against live Bedrock",
+    "Immutable rate cards, transactional token/cost reservations, invocation accounting and dispatch fencing",
+    "A bounded, budgeted schema-repair protocol validated against live responses",
+    "Bedrock embedding transport for versioned historical evidence and cause documents",
+    "DynamoDB canonical lifecycle and approval records; OpenSearch physical indexes, BM25 mapping, rebuild and rollback",
+    "Production semantic applicability features, calibration artifacts and independent held-out cohorts",
+    "Lineage provenance verification and near-duplicate detection beyond supplied fixture cluster IDs",
+    "A production publication lease with current case/runbook governance and report recall",
+    "Sealed candidate/scorer/exporter isolation and signed promotion evidence"
+  ],
+  "assurance": "Synthetic contract coverage only. No live model quality, retrieval benchmark, security certification or production precision claim."
+}

@@ -18,15 +18,23 @@ from incident_investigator.memory.contracts import (
 )
 from incident_investigator.memory.store import FixtureCaseStore, MemoryError
 from incident_investigator.providers.bedrock import EmbeddingConfig
-from incident_investigator.workflow.contracts import Hypothesis, ReplayInput
+from incident_investigator.workflow.contracts import Hypothesis, Observation, ReplayInput
 from incident_investigator.workflow.reasoning import hypothesize_observations, verify_hypotheses
+
+
+def current_observations(query: Query) -> tuple[Observation, ...]:
+    return tuple(
+        item
+        for item in query.incident.observations
+        if item.available_round <= query.collected_round
+    )
 
 
 def hypotheses(query: Query) -> tuple[Hypothesis, ...]:
     # Deterministic current-only hypotheses precede all historical retrieval.
     return verify_hypotheses(
-        hypothesize_observations(query.incident.workload, query.incident.observations),
-        query.incident.observations,
+        hypothesize_observations(query.incident.workload, current_observations(query)),
+        current_observations(query),
     )
 
 
@@ -47,7 +55,8 @@ def document_digest(terms: tuple[str, ...], kind: str) -> str:
 
 def query_terms(query: Query) -> tuple[tuple[str, ...], tuple[str, ...]]:
     query = Query.model_validate_json(query.model_dump_json())
-    return evidence_terms(query.incident), tuple(sorted(item.cause for item in hypotheses(query)))
+    visible = query.incident.model_copy(update={"observations": current_observations(query)})
+    return evidence_terms(visible), tuple(sorted(item.cause for item in hypotheses(query)))
 
 
 def validate_vectors(

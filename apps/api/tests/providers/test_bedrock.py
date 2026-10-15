@@ -274,3 +274,57 @@ def test_duplicate_json_keys_and_raw_evidence_are_rejected() -> None:
     modified["records"] = (RawEvidence("000000000000", REGION, "checkout", {"message": "secret"}),)
     with pytest.raises(ValueError):
         EvidenceInput.model_validate(modified)
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("output",), []),
+        (("output", "message"), []),
+        (("output", "message", "content"), []),
+        (("output", "message", "content"), [{"text": "untrusted text"}]),
+        (("usage",), []),
+        (("usage", "inputTokens"), -1),
+        (("usage", "inputTokens"), 80001),
+        (("usage", "totalTokens"), 999),
+    ],
+)
+def test_nested_response_shapes_and_usage_fail_closed(path: tuple[str, ...], value: Any) -> None:
+    raw = response()
+    container = raw
+    for key in path[:-1]:
+        container = container[key]
+    container[path[-1]] = value
+    with pytest.raises(ModelContractError):
+        replay(raw)
+
+
+def test_extra_tool_fields_and_missing_usage_fail_closed() -> None:
+    raw = response()
+    raw["output"]["message"]["content"][0]["toolUse"]["input"]["gold_labels"] = "secret"
+    with pytest.raises(ModelContractError):
+        replay(raw)
+    raw = response()
+    del raw["usage"]
+    with pytest.raises(ModelContractError):
+        replay(raw)
+
+
+def test_embedding_is_bound_to_recorded_request_and_accepts_matching_float_views() -> None:
+    value = {"embedding": [1.0] + [0.0] * 255, "inputTextTokenCount": 10}
+    raw = canonical_bytes(value | {"embeddingsByType": {"float": value["embedding"]}})
+    assert (
+        replay_embedding(EMBED, data(), embedding_request_digest(EMBED, data()), raw).vector[0] == 1
+    )
+    with pytest.raises(ModelContractError):
+        replay_embedding(EMBED, data(), "wrong-request", raw)
+
+
+def test_provider_boundary_does_not_depend_on_python_assertions() -> None:
+    import ast
+    from pathlib import Path
+
+    import incident_investigator.providers.bedrock as provider
+
+    tree = ast.parse(Path(provider.__file__).read_text(encoding="utf-8"))
+    assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree))

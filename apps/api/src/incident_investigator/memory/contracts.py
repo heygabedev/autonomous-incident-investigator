@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 from incident_investigator.evaluation.canonical import content_digest
 from incident_investigator.evaluation.models import Contract, Digest, Identifier, Timestamp
 from incident_investigator.providers.bedrock import EmbeddingConfig
+from incident_investigator.security.evidence import redact
 from incident_investigator.workflow.contracts import Cause, ReplayInput
 from incident_investigator.workflow.reasoning import PLANS
 
@@ -25,6 +26,8 @@ class Runbook(Contract):
 
     @model_validator(mode="after")
     def check_template(self) -> Self:
+        if redact(self.id) != self.id:
+            raise ValueError("unsafe_runbook_identifier")
         if self.template_digest != content_digest(list(PLANS[self.cause])):
             raise ValueError("runbook_template_mismatch")
         if self.reviewed_at >= self.expires_at:
@@ -52,6 +55,8 @@ class MemoryCase(Contract):
 
     @model_validator(mode="after")
     def check_case(self) -> Self:
+        if any(redact(value) != value for value in (self.lineage_id, self.duplicate_cluster_id)):
+            raise ValueError("unsafe_lineage_identifier")
         if self.incident.case_id != self.id:
             raise ValueError("case_identity")
         if not self.incident.investigation_cutoff <= self.resolved_at < self.valid_until:
@@ -71,6 +76,7 @@ class Query(Contract):
     incident: ReplayInput
     lineage_id: Identifier
     duplicate_cluster_id: Identifier
+    collected_round: Annotated[int, Field(ge=0, le=2)] = 0
 
 
 class DocumentVector(Contract):

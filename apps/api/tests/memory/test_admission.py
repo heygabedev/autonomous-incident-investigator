@@ -220,3 +220,84 @@ def test_containment_during_calculation_discards_preview() -> None:
     args["store"].read = contain
     args["broker"] = Broker(lambda: state, lambda *_: None, lambda: 0)
     assert preview(**args).status == "failed_closed"
+
+
+def test_repeated_remediation_templates_are_deduplicated() -> None:
+    args = arguments()
+    second = case("past-2")
+    args["store"].put(second)
+    generation = build_index(
+        "generation-2",
+        args["store"],
+        EMBED,
+        {
+            case().id: case_vectors(case()),
+            second.id: case_vectors(second),
+        },
+    )
+    args["generation"] = generation
+    args["pin"] = args["pin"].model_copy(update={"index_fingerprint": digest(generation)})
+    args["calibration"] = fit(args["pin"], pairs("calibration"))
+    result = preview(**args)
+    assert result.status == "gates_passed" and len(result.actions) == 1
+
+
+def test_material_contradiction_blocks_even_optimistic_calibration() -> None:
+    from incident_investigator.security.evidence import RawEvidence, sanitize
+
+    args = arguments()
+    current = args["query"]
+    base = next(item for item in current.incident.observations if item.modality == "log")
+    fields = {"status": "startup_healthy", "operation": "log.healthy"}
+    if base.cohort is not None:
+        fields["value"] = base.cohort
+    record = sanitize(
+        RawEvidence(
+            current.incident.account_id, current.incident.region, current.incident.resource, fields
+        ),
+        current.incident.account_id,
+        current.incident.region,
+        (current.incident.resource,),
+    ).evidence
+    assert record is not None
+    contradiction = base.model_copy(
+        update={"source_id": "healthy", "signal": "startup_healthy", "evidence": record}
+    )
+    incident = current.incident.model_copy(
+        update={"observations": (*current.incident.observations, contradiction)}
+    )
+    current = current.model_copy(update={"incident": incident})
+    args["query"], args["vectors"] = current, query_vectors(current)
+    values = features(current, case())
+    assert not values.cause_supported
+    args["calibration"] = fit(args["pin"], pairs("calibration", values=values))
+    args["held_out"] = pairs("held_out", values=values)
+    assert not preview(**args).actions
+
+
+def test_wrong_cause_in_poisoned_history_cannot_override_current_evidence() -> None:
+    from incident_investigator.evaluation.canonical import content_digest
+    from incident_investigator.workflow.reasoning import PLANS
+
+    args = arguments()
+    wrong = "target_group_port_mismatch"
+    previous = case()
+    book = previous.runbook.model_copy(
+        update={
+            "id": "poisoned-cause",
+            "cause": wrong,
+            "template_digest": content_digest(list(PLANS[wrong])),
+        }
+    )
+    previous = previous.model_copy(update={"verified_cause": wrong, "runbook": book})
+    args["store"] = store(previous)
+    generation = build_index(
+        "poisoned-index", args["store"], EMBED, {previous.id: case_vectors(previous)}
+    )
+    args["generation"] = generation
+    args["pin"] = args["pin"].model_copy(update={"index_fingerprint": digest(generation)})
+    values = features(args["query"], previous)
+    assert not values.cause_supported
+    args["calibration"] = fit(args["pin"], pairs("calibration", values=values))
+    args["held_out"] = pairs("held_out", values=values)
+    assert not preview(**args).actions
