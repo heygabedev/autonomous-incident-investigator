@@ -79,11 +79,16 @@ def observations(state: RunState) -> tuple[Observation, ...]:
 
 
 def hypothesize(state: RunState) -> tuple[Hypothesis, ...]:
-    observed = observations(state)
+    return hypothesize_observations(state.incident.workload, observations(state))
+
+
+def hypothesize_observations(
+    workload: Literal["ecs_fargate", "lambda_serverless"], observed: tuple[Observation, ...]
+) -> tuple[Hypothesis, ...]:
     results: list[Hypothesis] = []
     for cause, signals in SUPPORT.items():
         ecs = cause in ("missing_required_environment_variable", "target_group_port_mismatch")
-        if ecs != (state.incident.workload == "ecs_fargate"):
+        if ecs != (workload == "ecs_fargate"):
             continue
         support = [item for item in observed if item.signal in signals]
         if support:
@@ -98,9 +103,14 @@ def hypothesize(state: RunState) -> tuple[Hypothesis, ...]:
 
 
 def verify(state: RunState) -> tuple[Hypothesis, ...]:
-    observed = observations(state)
+    return verify_hypotheses(state.hypotheses, observations(state))
+
+
+def verify_hypotheses(
+    hypotheses: tuple[Hypothesis, ...], observed: tuple[Observation, ...]
+) -> tuple[Hypothesis, ...]:
     results: list[Hypothesis] = []
-    for hypothesis in state.hypotheses:
+    for hypothesis in hypotheses:
         support = [item for item in observed if item.evidence.id in hypothesis.evidence_ids]
         complete = set(REQUIRED[hypothesis.cause]).issubset(item.signal for item in support)
         core = [item for item in support if item.signal in REQUIRED[hypothesis.cause]]
