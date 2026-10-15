@@ -88,6 +88,8 @@ class _Replay:
                 raise CollectionError("deadline")
             if exchange.error_code is None:
                 check_payload(exchange.response)
+                if not isinstance(exchange.response, dict):
+                    raise CollectionError("unsupported_payload")
                 return exchange.response
             if exchange.error_code in DENIED:
                 raise CollectionError("permission_denied")

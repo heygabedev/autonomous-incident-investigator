@@ -72,6 +72,26 @@ def test_missing_and_oversized_tapes_do_not_dispatch() -> None:
         RecordedTape((Exchange(exchange.call, elapsed_ms=-1),))
 
 
+@pytest.mark.parametrize("payload", [None, [], "private response", 1])
+def test_non_object_sdk_responses_fail_closed_in_collection_and_cleanup(payload: Any) -> None:
+    scope = request("ecs_service_v1")
+    result = replay(scope, RecordedTape((Exchange(compile_request(scope), payload),)))
+    assert result.gaps == ("unsupported_payload",) and not result.observations
+    scope = request("structured_logs_v1", max_calls=3)
+    result = replay(
+        scope,
+        RecordedTape(
+            (
+                Exchange(compile_request(scope), {"queryId": QUERY}),
+                Exchange(query_call(QUERY), {"status": "Running", "results": []}),
+                Exchange(query_call(QUERY, stop=True), payload),
+            )
+        ),
+    )
+    assert result.gaps == ("call_limit", "unsupported_payload")
+    assert "private response" not in result.model_dump_json()
+
+
 @pytest.mark.parametrize("template", list(TARGETS))
 def test_unexpected_response_shapes_and_nulls_are_generic(template: Template) -> None:
     scope = request(template)
