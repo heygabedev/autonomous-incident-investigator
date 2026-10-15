@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "review_inventory_not_deployable_policy",
+  "live_enabled": false,
+  "scope": "Commercial partition, one explicitly selected account and Region; recorded SDK exchanges only.",
+  "limitations": [
+    "No credential resolution, role assumption, live collection, queue consumption or account changes are implemented here.",
+    "Request compilation and SDK stub tests are not IAM authorization tests against a deployed account.",
+    "Classic CloudWatch metric reads and ELB target-health reads cannot be limited to the target ARN by these IAM actions alone. A dedicated account role, Region conditions and broker validation are required before enablement.",
+    "Logs StartQuery is billable and not idempotent. Ambiguous failures are not retried. Query cleanup is simulated and may remain unconfirmed after a deadline.",
+    "Snapshot configuration is not historical evidence of a past incident. Logs support only lower-case structured status/error-code counters, not arbitrary message extraction.",
+    "Replay delays are simulated; no live latency, price, RTO or security certification is claimed."
+  ],
+  "operations": [
+    {"operation":"cloudwatch.get_metric_data","iam_action":"cloudwatch:GetMetricData","access":"Read","iam_scope":"classic_metrics_wildcard","templates":["lambda_errors_v1","ecs_cpu_v1","dynamodb_throttles_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html"},
+    {"operation":"logs.start_query","iam_action":"logs:StartQuery","access":"Read","iam_scope":"log_group","templates":["structured_logs_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html"},
+    {"operation":"logs.get_query_results","iam_action":"logs:GetQueryResults","access":"Read","iam_scope":"log_group","templates":["structured_logs_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html"},
+    {"operation":"logs.stop_query","iam_action":"logs:StopQuery","access":"Read","iam_scope":"wildcard_owned_query_only","templates":["structured_logs_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html"},
+    {"operation":"ecs.describe_services","iam_action":"ecs:DescribeServices","access":"Read","iam_scope":"service_and_cluster_condition","templates":["ecs_service_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html"},
+    {"operation":"lambda.get_function_configuration","iam_action":"lambda:GetFunctionConfiguration","access":"Read","iam_scope":"function","templates":["lambda_configuration_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_lambda.html"},
+    {"operation":"dynamodb.describe_table","iam_action":"dynamodb:DescribeTable","access":"Read","iam_scope":"table","templates":["dynamodb_table_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_dynamodb.html"},
+    {"operation":"elbv2.describe_target_health","iam_action":"elasticloadbalancing:DescribeTargetHealth","access":"Read","iam_scope":"wildcard","templates":["alb_target_health_v1"],"source":"https://docs.aws.amazon.com/service-authorization/latest/reference/list_elbv2.html"}
+  ],
+  "deferred": [
+    "verified_identity_center_mfa_and_sts_assumption",
+    "transactional_live_budgets_dispatch_leases_and_cost_accounting",
+    "eventbridge_sqs_alarm_intake_acknowledgement_and_redrive",
+    "cloudwatch_alarms_xray_traces_and_topology",
+    "cloudtrail_and_aws_config_changes",
+    "ecs_tasks_task_definitions_deployments_and_container_insights",
+    "api_gateway_and_step_functions",
+    "terraform_iam_roles_and_live_canary_acceptance",
+    "live_evidence_to_graph_integration"
+  ]
+}

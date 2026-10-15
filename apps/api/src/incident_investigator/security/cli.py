@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import subprocess
 from collections.abc import Iterator
@@ -7,9 +8,11 @@ from typing import Annotated, Literal
 
 import typer
 
+from incident_investigator.collectors.doctor import DoctorResult, inspect_config
 from incident_investigator.security.authority import SecurityAuthority
+from incident_investigator.security.identity import IdentityRequirement
 from incident_investigator.security.policy import Feature
-from incident_investigator.security.storage import latch_safe_mode, protect_directory
+from incident_investigator.security.storage import latch_safe_mode, local_path, protect_directory
 
 app = typer.Typer(help="Local containment controls. No AWS operations.")
 safe = typer.Typer()
@@ -18,6 +21,32 @@ app.add_typer(safe, name="safe-mode")
 app.add_typer(features, name="feature")
 Directory = Annotated[Path, typer.Option("--data-dir")]
 DEFAULT_DIRECTORY = Path(".data/runtime")
+
+
+@app.command("doctor")
+def doctor(
+    config: Annotated[Path, typer.Option("--config")],
+    profile: Annotated[str, typer.Option("--profile")],
+    account: Annotated[str, typer.Option("--account")],
+    region: Annotated[str, typer.Option("--region")],
+    role: Annotated[str, typer.Option("--role")],
+) -> None:
+    """Inspect local Identity Center configuration; never authenticate or enable live mode."""
+    try:
+        requirement = IdentityRequirement(
+            profile=profile, account_id=account, region=region, collector_role_name=role
+        )
+        path = local_path(config)
+        if not path.is_file():
+            raise ValueError("regular_config_file_required")
+        with path.open("rb") as source:
+            raw = source.read(65_537)
+        result = inspect_config(raw, requirement, os.environ)
+    except (OSError, ValueError):
+        result = DoctorResult(configuration_valid=False, checks=("configuration_unavailable",))
+    typer.echo(result.model_dump_json())
+    if not result.configuration_valid:
+        raise typer.Exit(2)
 
 
 @contextmanager
