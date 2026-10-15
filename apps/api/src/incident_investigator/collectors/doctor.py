@@ -38,7 +38,7 @@ def inspect_config(
             raise ValueError("profile_not_found")
         profile = dict(parser[section])
         validate_profile(requirement, profile, environment)
-        session = f" sso-session {profile['sso_session']}".strip()
+        session = f"sso-session {profile['sso_session']}"
         if session not in parser:
             raise ValueError("sso_session_not_found")
         settings = dict(parser[session])
