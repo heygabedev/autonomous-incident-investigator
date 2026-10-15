@@ -65,6 +65,7 @@ OPERATIONS: dict[str, tuple[Feature, bool]] = {
     "dynamodb.describe_table": ("collection", True),
     "elbv2.describe_target_health": ("collection", True),
     "bedrock.converse": ("model", True),
+    "bedrock.embed": ("model", True),
     "history.read": ("history", False),
     "report.publish": ("publication", False),
 }
