@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "version": "1.0.0",
+  "source": "synthetic_development",
+  "purpose": "Gate-logic regression scenarios, not independent performance benchmark incidents.",
+  "promotion_eligible": false,
+  "permitted_use": "development",
+  "cases": [
+    {"mutation": "precision", "expected_status": "no_actions"},
+    {"mutation": "index", "expected_status": "failed_closed"},
+    {"mutation": "reasoning", "expected_status": "failed_closed"},
+    {"mutation": "policy", "expected_status": "failed_closed"},
+    {"mutation": "same_cause", "expected_status": "no_actions"},
+    {"mutation": "applicability", "expected_status": "no_actions"},
+    {"mutation": "runbook", "expected_status": "no_actions"},
+    {"mutation": "case", "expected_status": "no_actions"},
+    {"mutation": "safe_mode", "expected_status": "failed_closed"},
+    {"mutation": "feature", "expected_status": "failed_closed"},
+    {"mutation": "candidate", "expected_status": "failed_closed"},
+    {"mutation": "audit", "expected_status": "failed_closed"},
+    {"mutation": "canonical_unavailable", "expected_status": "failed_closed"}
+  ]
+}
