@@ -36,7 +36,10 @@ def doctor(
         requirement = IdentityRequirement(
             profile=profile, account_id=account, region=region, collector_role_name=role
         )
-        with local_path(config).open("rb") as source:
+        path = local_path(config)
+        if not path.is_file():
+            raise ValueError("regular_config_file_required")
+        with path.open("rb") as source:
             raw = source.read(65_537)
         result = inspect_config(raw, requirement, os.environ)
     except (OSError, ValueError):
