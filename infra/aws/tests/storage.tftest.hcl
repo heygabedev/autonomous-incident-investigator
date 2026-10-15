@@ -16,6 +16,24 @@ mock_provider "aws" {
   }
 }
 
+override_resource {
+  target = aws_kms_key.queue
+  values = {
+    arn    = "arn:aws:kms:eu-central-1:111122223333:key/00000000-0000-0000-0000-000000000002"
+    key_id = "00000000-0000-0000-0000-000000000002"
+  }
+}
+
+override_resource {
+  target = aws_iam_policy.runtime
+  values = { arn = "arn:aws:iam::111122223333:policy/runtime-boundary" }
+}
+
+override_resource {
+  target = aws_iam_policy.collector
+  values = { arn = "arn:aws:iam::111122223333:policy/collector-boundary" }
+}
+
 variables {
   name                = "incident-test"
   account_id          = "111122223333"
@@ -50,6 +68,18 @@ run "protected_storage" {
   assert {
     condition     = !output.activation.live_runtime_enabled && !output.activation.private_evaluation
     error_message = "Provisioning does not enable live runtime or private evaluation."
+  }
+  assert {
+    condition     = aws_cloudwatch_log_group.runtime.retention_in_days == 90 && aws_cloudwatch_log_group.runtime.kms_key_id == aws_kms_key.storage.arn && jsondecode(aws_kms_key.storage.policy).Statement[1].Condition.ArnEquals["kms:EncryptionContext:aws:logs:arn"] == local.log_arn
+    error_message = "Runtime logs need retained encryption scoped to their exact log group."
+  }
+  assert {
+    condition     = aws_kms_key.queue.arn != aws_kms_key.storage.arn && alltrue([for config in aws_s3_bucket_server_side_encryption_configuration.private : one(config.rule).apply_server_side_encryption_by_default[0].kms_master_key_id == aws_kms_key.storage.arn]) && aws_dynamodb_table.records.server_side_encryption[0].kms_key_arn == aws_kms_key.storage.arn
+    error_message = "Storage and queues must use distinct keys, with all authoritative stores encrypted."
+  }
+  assert {
+    condition     = alltrue([for config in aws_s3_bucket_lifecycle_configuration.private : length(one(config.rule).expiration) == 0 && length(one(config.rule).noncurrent_version_expiration) == 0]) && length(aws_dynamodb_table.records.ttl) == 0
+    error_message = "Authoritative versions and records must not expire automatically."
   }
 }
 
@@ -142,8 +172,36 @@ run "runtime_permissions_are_separate" {
     error_message = "Both roles need bounded permissions and temporary sessions."
   }
   assert {
+    condition     = aws_iam_role.runtime.permissions_boundary == aws_iam_policy.runtime.arn && aws_iam_role.collector.permissions_boundary == aws_iam_policy.collector.arn && aws_iam_policy.runtime.arn != aws_iam_policy.collector.arn
+    error_message = "Do not interchange the storage writer and read-only workload boundaries."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role.runtime.assume_role_policy).Statement[0].Principal.AWS == var.operator_role_arn && jsondecode(aws_iam_role.collector.assume_role_policy).Statement[0].Principal.AWS == var.operator_role_arn
+    error_message = "Trust only the selected existing Identity Center role, not the account root."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_policy.runtime.policy).Statement[1].Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"] == ["runtime#*"] && jsondecode(aws_iam_policy.runtime.policy).Statement[2].Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"] == ["case#*"] && jsondecode(aws_iam_policy.runtime.policy).Statement[2].Action == ["dynamodb:GetItem", "dynamodb:Query"]
+    error_message = "Canonical case access must remain read-only and separate from runtime records."
+  }
+  assert {
     condition     = alltrue([for policy in aws_s3_bucket_policy.private : length(jsondecode(policy.policy).Statement) == 3 && jsondecode(policy.policy).Statement[2].Condition.StringNotEquals["s3:x-amz-server-side-encryption-aws-kms-key-id"] == aws_kms_key.storage.arn])
     error_message = "Every object upload must use the selected KMS key."
+  }
+}
+
+run "queue_policy_boundaries" {
+  command = apply
+  assert {
+    condition     = alltrue([for name in ["intake", "delivery-dlq"] : jsondecode(aws_sqs_queue_policy.restricted[name].policy).Statement[3].Condition.ArnEquals["aws:SourceArn"] == local.rule_arn && jsondecode(aws_sqs_queue_policy.restricted[name].policy).Statement[3].Condition.StringEquals["aws:SourceAccount"] == var.account_id])
+    error_message = "EventBridge delivery grants must be scoped to the exact rule and account."
+  }
+  assert {
+    condition     = alltrue([for name in ["processing-dlq", "delivery-dlq"] : jsondecode(aws_sqs_queue_policy.restricted[name].policy).Statement[1].Condition.ArnNotEquals["aws:PrincipalArn"] == [var.deployment_role_arn]])
+    error_message = "Runtime must not consume dead-letter payloads, which may be unsanitized."
+  }
+  assert {
+    condition     = alltrue([for policy in aws_sqs_queue_policy.restricted : jsondecode(policy.policy).Statement[2].Condition.ArnNotEquals["aws:PrincipalArn"] == var.deployment_role_arn && contains(jsondecode(policy.policy).Statement[2].Action, "sqs:PurgeQueue")])
+    error_message = "Runtime must not purge queues or change their recovery settings."
   }
 }
 

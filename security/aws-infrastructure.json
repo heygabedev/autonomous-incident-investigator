@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0.0",
+  "scope": "undeployed, single-account, single-Region Terraform foundation",
+  "live_enabled": false,
+  "private_evaluation_enabled": false,
+  "deployment_authorized": false,
+  "terraform_version": "1.16.6",
+  "aws_provider_version": "6.69.0",
+  "storage": {
+    "quarantine": "Restricted raw incident quarantine; not accessible by runtime role.",
+    "datasets": "Private sanitized snapshots; not accessible by runtime role. DVC client setup is deferred.",
+    "runs": "Private evaluation output storage; runtime only reads/writes reports/.",
+    "audit": "Runtime can write events/ but cannot read or delete objects.",
+    "artifacts": "Runtime can read releases/ but cannot write artifacts.",
+    "records": "Canonical DynamoDB records with 35-day PITR and deletion protection. Runtime reads case# keys and reads/writes runtime# keys only.",
+    "logs": "KMS-encrypted application log group with 90-day retention. Runtime can create streams and append events only."
+  },
+  "intake": {
+    "default": "disabled",
+    "selection": "Exact same-account/Region alarm ARNs; ALARM transitions only.",
+    "normal_payload": "Event ID, timestamp, alarm ARN, account, Region and state; no reason or alarm configuration.",
+    "processing_dlq": "After five intake receives, accepts only the intake queue as a redrive source.",
+    "delivery_dlq": "EventBridge delivery failures can retain the original event, including unsanitized fields. Runtime cannot read either DLQ.",
+    "retention_seconds": 1209600,
+    "retention_caveat": "Standard SQS processing-DLQ expiration retains original enqueue time; this is not an additional 14 days after dead-lettering.",
+    "alerts": "DLQ count and backlog age alarms exist, but no notification destination or paging subscription is configured."
+  },
+  "identity": {
+    "deployment": "Explicit profile, expected account, Region and dedicated assumed role; no fallback provider configuration.",
+    "runtime_and_collector": "Separate exact Identity Center principal trusts, denied by default, one-hour sessions and permissions boundaries.",
+    "collector": "Only eight reviewed metadata/telemetry operations; no workload mutations. Classic metrics, ELB health and query cleanup wildcard resources need explicit opt-in.",
+    "mfa": "Phishing-resistant Identity Center MFA must be independently verified before enabling assumption; Terraform and GetCallerIdentity do not prove MFA configuration.",
+    "governance": "No Identity Center settings, permission sets or existing account policies are modified by this module."
+  },
+  "plan_check": {
+    "command": "incidentctl infrastructure-check --plan <local Terraform show JSON>",
+    "input_limit_bytes": 1048576,
+    "resource_limit": 500,
+    "exit_codes": {"0": "bounded recovery checks passed, not deployment approval", "2": "blocked or invalid", "3": "additional security review required"},
+    "blocked": ["delete", "replace", "forget", "state import or move", "drift", "deferral", "unknown provider or resource", "incomplete or failed plan", "failed or unknown checks", "recovery weakening", "all existing-resource updates"],
+    "review_required": ["new policy-bearing resources", "new routing or monitoring resources", "unknown recovery identifiers during creation"],
+    "limitations": "Not a full IAM policy analyzer, plan signature verifier, configuration completeness check or permission to apply. An initial plan normally requires review because new key ARNs and policy documents are unresolved. CLI never invokes Terraform, resolves AWS credentials or prints resource values."
+  },
+  "verification": {
+    "terraform": "Mock-provider apply/plan tests only; Linux CI runs with external networking disabled after provider installation.",
+    "windows": "Mock-provider tests with no AWS/OIDC credentials; not an OS-level network sandbox.",
+    "python": "Credential-free plan-guard tests with socket blocking.",
+    "live_iam": "not performed",
+    "restore_drills": "not performed",
+    "achieved_rto_rpo": null
+  },
+  "limitations": [
+    "No AWS resources have been provisioned by this work. Applying the module later incurs AWS charges.",
+    "No remote Terraform state backend or state backup procedure is bootstrapped. State and plan JSON can contain sensitive values and must not enter Git or CI artifacts.",
+    "Terraform prevent_destroy is a configuration guard, not AWS deletion protection. Removing configuration or using privileged AWS calls can bypass it; the plan checker independently rejects deletions.",
+    "S3 versioning is not Object Lock/WORM. Application content addressing, signing and immutable manifest enforcement are separate controls.",
+    "Owning account administrators can change resource policies, permissions boundaries and retention. This is not protection against a compromised AWS administrator.",
+    "Queue consumers, idempotent AWS replay, manual DLQ redrive and verified store cutover are not implemented.",
+    "Creating resources or enabling Terraform flags does not enable live application adapters, model calls, historical publication or private evaluation."
+  ],
+  "deferred": [
+    "OpenSearch Serverless physical generations and network isolation",
+    "CodeBuild candidate/scorer/exporter process and IAM isolation",
+    "Private evaluation role, GitHub OIDC trust and signed aggregate export",
+    "S3 DVC client and remote configuration",
+    "Remote Terraform state protection and archived reviewed plan/apply evidence",
+    "Deployed IAM simulator and negative permission tests",
+    "DynamoDB PITR, S3 version and queue replay recovery drills",
+    "Live broker dispatch leases, budgets and runtime integrations",
+    "Release activation and monotonic governance replay during recovery"
+  ],
+  "references": [
+    "https://developer.hashicorp.com/terraform/language/tests/mocking",
+    "https://developer.hashicorp.com/terraform/internals/json-format",
+    "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-least-privilege-policy.html",
+    "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-key-management.html",
+    "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-use-resource-based.html"
+  ]
+}

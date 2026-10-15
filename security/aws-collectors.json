@@ -29,7 +29,7 @@
     "cloudtrail_and_aws_config_changes",
     "ecs_tasks_task_definitions_deployments_and_container_insights",
     "api_gateway_and_step_functions",
-    "terraform_iam_roles_and_live_canary_acceptance",
+    "deployed_iam_negative_tests_and_live_canary_acceptance",
     "live_evidence_to_graph_integration"
   ]
 }
